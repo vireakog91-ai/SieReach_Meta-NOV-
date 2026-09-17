@@ -1,609 +1,583 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Navbar } from "@/components/telegram/Navbar";
-import { DashboardOverviewTab } from "@/components/telegram/DashboardOverviewTab";
-import { QueueAndHistoryTab } from "@/components/telegram/QueueAndHistoryTab";
-import { ContentCalendarTab } from "@/components/telegram/ContentCalendarTab";
-import { ChannelsManagerTab } from "@/components/telegram/ChannelsManagerTab";
-import { TemplatesTab } from "@/components/telegram/TemplatesTab";
-import { DeliveryLogsTab } from "@/components/telegram/DeliveryLogsTab";
-import { SettingsTab } from "@/components/telegram/SettingsTab";
-import { PostComposerModal } from "@/components/telegram/PostComposerModal";
+import {
+  Radar,
+  Bot,
+  Layers,
+  History,
+  Settings,
+  AlertCircle,
+  CheckCircle2,
+  RefreshCw,
+  Send,
+  Sparkles,
+  BarChart3,
+} from "lucide-react";
+import { Navbar } from "@/components/Navbar";
+import { StatsCards } from "@/components/StatsCards";
+import { ScannerTab } from "@/components/ScannerTab";
+import { BotSetupTab } from "@/components/BotSetupTab";
+import { ReportDashboardTab } from "@/components/ReportDashboardTab";
+import { PagesManagerTab } from "@/components/PagesManagerTab";
+import { BlastLogsTab } from "@/components/BlastLogsTab";
+import { SettingsTab } from "@/components/SettingsTab";
+import { LiveBlastModal, LiveBlastStep } from "@/components/LiveBlastModal";
+import { AnalyzedLead, ScannerSummary } from "@/lib/scanner";
 
-export default function SieReachTelegramScheduler() {
+export default function SieReachDashboard() {
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "queue" | "calendar" | "channels" | "templates" | "logs" | "settings"
-  >("dashboard");
+    "scanner" | "bot-setup" | "reports" | "pages" | "logs" | "settings"
+  >("scanner");
 
-  // Data states
-  const [posts, setPosts] = useState<any[]>([]);
-  const [channels, setChannels] = useState<any[]>([]);
-  const [bots, setBots] = useState<any[]>([]);
-  const [templates, setTemplates] = useState<any[]>([]);
+  // App State
+  const [isMockMode, setIsMockMode] = useState(true);
+  const [thresholdHours, setThresholdHours] = useState(24.0);
+  const [selectedPageId, setSelectedPageId] = useState("ALL");
+
+  // Data State
+  const [scannerData, setScannerData] = useState<ScannerSummary>({
+    totalPages: 5,
+    totalLeads: 0,
+    awaitingCustomer: 0,
+    unresponsiveCount: 0,
+    urgent24hCount: 0,
+    expired24hCount: 0,
+    followedUpCount: 0,
+    leads: [],
+  });
+
+  const [pages, setPages] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>({
-    totalScheduled: 0,
-    totalPublished: 0,
-    totalFailed: 0,
-    totalRecurring: 0,
-    totalDrafts: 0,
-    sentTodayCount: 0,
-    totalSuccessLogs: 0,
-    totalFailedLogs: 0,
-    successRate: 100,
-    totalChannels: 0,
-    totalAudience: 0,
-  });
-  const [nextPost, setNextPost] = useState<any>(null);
-  const [settings, setSettings] = useState<Record<string, string>>({
-    sandbox_mode: "true",
-    timezone: "Asia/Phnom_Penh",
-  });
+  const [logStats, setLogStats] = useState({ totalDelivered: 0, totalFailed: 0 });
 
-  // UI state
+  // Loading States
   const [isLoading, setIsLoading] = useState(true);
-  const [isComposerOpen, setIsComposerOpen] = useState(false);
-  const [editingPost, setEditingPost] = useState<any>(null);
-  const [isSubmittingPost, setIsSubmittingPost] = useState(false);
-  const [isSeeding, setIsSeeding] = useState(false);
-  const [notification, setNotification] = useState<{
-    type: "success" | "error" | "info";
+  const [isScanning, setIsScanning] = useState(false);
+  const [isBlasting, setIsBlasting] = useState(false);
+  const [isSavingCampaign, setIsSavingCampaign] = useState(false);
+  const [blastFeedback, setBlastFeedback] = useState<{
+    show: boolean;
+    title: string;
     message: string;
+    count: number;
   } | null>(null);
 
-  // User session state
-  const [currentUser, setCurrentUser] = useState<{
-    id: string;
-    email: string;
-    name: string;
-    role: "ADMIN" | "CLIENT";
-    avatarUrl?: string | null;
-  } | null>(null);
-
-  const showNotification = (message: string, type: "success" | "error" | "info" = "success") => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 4000);
-  };
-
-  // Fetch current user session
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await fetch("/api/auth/me");
-        const data = await res.json();
-        if (data.success && data.user) {
-          setCurrentUser(data.user);
-        }
-      } catch {
-        // Ignored
-      }
-    };
-    fetchUser();
-  }, []);
-
-  // Prevent CLIENT role from opening Settings tab
-  useEffect(() => {
-    if (currentUser?.role === "CLIENT" && activeTab === "settings") {
-      setActiveTab("dashboard");
-    }
-  }, [currentUser, activeTab]);
-
-  const handleLogout = async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-    } finally {
-      window.location.href = "/login";
-    }
-  };
-
-  // Fetch all platform data
+  // Fetch all data
   const fetchData = useCallback(async () => {
     try {
-      const [postsRes, channelsRes, botsRes, templatesRes, analyticsRes, settingsRes] =
-        await Promise.all([
-          fetch("/api/telegram/posts"),
-          fetch("/api/telegram/channels"),
-          fetch("/api/telegram/bots"),
-          fetch("/api/telegram/templates"),
-          fetch("/api/telegram/analytics"),
-          fetch("/api/telegram/settings"),
-        ]);
+      // 1. Fetch Pages
+      const pagesRes = await fetch("/api/pages");
+      const pagesJson = await pagesRes.json();
+      if (pagesJson.success) setPages(pagesJson.pages || []);
 
-      const [
-        postsJson,
-        channelsJson,
-        botsJson,
-        templatesJson,
-        analyticsJson,
-        settingsJson,
-      ] = await Promise.all([
-        postsRes.json(),
-        channelsRes.json(),
-        botsRes.json(),
-        templatesRes.json(),
-        analyticsRes.json(),
-        settingsRes.json(),
-      ]);
+      // 2. Fetch Leads with threshold
+      const pageParam = selectedPageId !== "ALL" ? `&pageId=${selectedPageId}` : "";
+      const leadsRes = await fetch(
+        `/api/leads?thresholdHours=${thresholdHours}${pageParam}`
+      );
+      const leadsJson = await leadsRes.json();
+      if (leadsJson.success) setScannerData(leadsJson.data);
 
-      if (postsJson.success) setPosts(postsJson.posts || []);
-      if (channelsJson.success) setChannels(channelsJson.channels || []);
-      if (botsJson.success) setBots(botsJson.bots || []);
-      if (templatesJson.success) setTemplates(templatesJson.templates || []);
-      if (settingsJson.success) setSettings(settingsJson.settings || {});
+      // 3. Fetch Campaigns
+      const campRes = await fetch("/api/campaigns");
+      const campJson = await campRes.json();
+      if (campJson.success) setCampaigns(campJson.campaigns || []);
 
-      if (analyticsJson.success) {
-        setStats(analyticsJson.stats || {});
-        setNextPost(analyticsJson.nextUpcomingPost || null);
-        setLogs(analyticsJson.recentLogs || []);
+      // 4. Fetch Logs
+      const logsRes = await fetch("/api/logs");
+      const logsJson = await logsRes.json();
+      if (logsJson.success) {
+        setLogs(logsJson.logs || []);
+        setLogStats({
+          totalDelivered: logsJson.stats.totalDelivered,
+          totalFailed: logsJson.stats.totalFailed,
+        });
       }
-    } catch (err: any) {
-      console.error("Error loading platform data:", err);
+
+      // 5. Fetch Settings
+      const setRes = await fetch("/api/settings");
+      const setJson = await setRes.json();
+      if (setJson.success && setJson.settings) {
+        setIsMockMode(setJson.settings.MOCK_MODE === "true");
+      }
+    } catch (err) {
+      console.error("Failed to load SieReach data:", err);
     } finally {
       setIsLoading(false);
+      setIsScanning(false);
     }
-  }, []);
+  }, [selectedPageId, thresholdHours]);
 
-  // Initial load
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Automated background scheduler heartbeat: runs every 15s
+  // Recurring Background Auto-Blast Poller (Every 30 seconds)
   useEffect(() => {
+    const hasAutoBlast = campaigns.some((c) => c.autoBlast && c.isActive);
+    if (!hasAutoBlast) return;
+
     const interval = setInterval(async () => {
       try {
-        const res = await fetch("/api/telegram/cron", { method: "POST" });
-        const data = await res.json();
-        if (data.success && data.result?.processedCount > 0) {
-          showNotification(
-            `Automated Worker: Processed ${data.result.processedCount} scheduled post(s)!`,
-            "info"
-          );
+        const res = await fetch("/api/cron/auto-blast");
+        const json = await res.json();
+        if (json.success && json.data?.totalDelivered > 0) {
+          // If automated messages were dispatched, refresh dashboard data
           fetchData();
         }
-      } catch {
-        // Silent
+      } catch (err) {
+        console.error("Auto-blast poller error:", err);
       }
-    }, 15000);
+    }, 30_000);
 
     return () => clearInterval(interval);
-  }, [fetchData]);
+  }, [campaigns, fetchData]);
 
-  // Handler: Save post (Create or Edit)
-  const handleSavePost = async (postData: any) => {
-    setIsSubmittingPost(true);
+  // Handler: Re-scan
+  const handleRefreshScan = async () => {
+    setIsScanning(true);
+    await fetchData();
+  };
+
+  // Handler: Reset Demo Data
+  const handleResetDemoData = async () => {
+    setIsScanning(true);
     try {
-      const isEdit = Boolean(postData.id);
-      const url = isEdit
-        ? `/api/telegram/posts/${postData.id}`
-        : "/api/telegram/posts";
-      const method = isEdit ? "PATCH" : "POST";
+      const res = await fetch("/api/seed", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setBlastFeedback({
+          show: true,
+          title: "Demo Data Reset",
+          message: "All 5 Facebook pages and ad click-through leads have been restored with fresh timers.",
+          count: 0,
+        });
+        setTimeout(() => setBlastFeedback(null), 4000);
+        await fetchData();
+      }
+    } catch (err) {
+      console.error("Reset error:", err);
+    } finally {
+      setIsScanning(false);
+    }
+  };
 
-      const res = await fetch(url, {
+  // Handler: Toggle Mock Mode
+  const handleToggleMockMode = async () => {
+    const nextMode = !isMockMode;
+    setIsMockMode(nextMode);
+    await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ MOCK_MODE: nextMode ? "true" : "false" }),
+    });
+  };
+
+  // Live Blast State
+  const [isLiveBlastOpen, setIsLiveBlastOpen] = useState(false);
+  const [liveBlastTotal, setLiveBlastTotal] = useState(0);
+  const [liveBlastCurrent, setLiveBlastCurrent] = useState(0);
+  const [liveBlastStatus, setLiveBlastStatus] = useState("");
+  const [liveCountdown, setLiveCountdown] = useState(0);
+  const [liveSteps, setLiveSteps] = useState<LiveBlastStep[]>([]);
+  const [isLiveFinished, setIsLiveFinished] = useState(false);
+  const stopBlastRef = React.useRef(false);
+
+  // Sequential Drip Blaster with live visual countdown
+  const runSequentialBlast = async (leadsToBlast: AnalyzedLead[], campaignId?: string) => {
+    if (leadsToBlast.length === 0) return;
+
+    stopBlastRef.current = false;
+    setIsLiveBlastOpen(true);
+    setLiveBlastTotal(leadsToBlast.length);
+    setLiveBlastCurrent(0);
+    setLiveSteps([]);
+    setIsLiveFinished(false);
+    setLiveCountdown(0);
+    setIsBlasting(true);
+
+    const activeCamp = campaigns.find((c) => c.id === campaignId) || campaigns[0];
+    const minDelay = activeCamp?.dripMinSeconds ?? 3.0;
+    const maxDelay = activeCamp?.dripMaxSeconds ?? 5.0;
+
+    let previousDelaySec: number | undefined = undefined;
+
+    for (let i = 0; i < leadsToBlast.length; i++) {
+      if (stopBlastRef.current) break;
+
+      const lead = leadsToBlast[i];
+      setLiveBlastStatus(`Dispatching to ${lead.customerName} (${i + 1} of ${leadsToBlast.length})...`);
+
+      // 1. Send this single lead
+      try {
+        const res = await fetch("/api/blast", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            campaignId: activeCamp?.id,
+            leadIds: [lead.id],
+            customThresholdHours: thresholdHours,
+            messageTag: "HUMAN_AGENT",
+            excludePast24h: activeCamp?.excludePast24h ?? true,
+          }),
+        });
+
+        const data = await res.json();
+        const success = data?.report?.successful > 0;
+        const stepTime = new Date().toLocaleTimeString();
+
+        setLiveSteps((prev) => [
+          {
+            customerName: lead.customerName,
+            pageName: lead.pageName,
+            status: success ? "DELIVERED" : "FAILED",
+            delaySeconds: previousDelaySec,
+            time: stepTime,
+          },
+          ...prev,
+        ]);
+      } catch (err) {
+        console.error(err);
+      }
+
+      setLiveBlastCurrent(i + 1);
+
+      // 2. If there are more leads in queue, perform live drip countdown
+      if (i < leadsToBlast.length - 1 && !stopBlastRef.current) {
+        const delay = Number((minDelay + Math.random() * (maxDelay - minDelay)).toFixed(1));
+        previousDelaySec = delay;
+
+        setLiveBlastStatus(`Drip Pacing: Pausing ${delay}s before next customer...`);
+
+        let remaining = delay;
+        setLiveCountdown(remaining);
+
+        while (remaining > 0 && !stopBlastRef.current) {
+          await new Promise((r) => setTimeout(r, 100));
+          remaining = Math.max(0, Number((remaining - 0.1).toFixed(1)));
+          setLiveCountdown(remaining);
+        }
+      }
+    }
+
+    setIsLiveFinished(true);
+    setIsBlasting(false);
+    setLiveCountdown(0);
+    await fetchData();
+  };
+
+  // Handler: Trigger Blast to selected leads
+  const handleTriggerBlast = async (leadIds: string[]) => {
+    if (leadIds.length === 0) return;
+    const leadsToBlast = scannerData.leads.filter((l) => leadIds.includes(l.id));
+    await runSequentialBlast(leadsToBlast);
+  };
+
+  // Handler: Campaign Save
+  const handleSaveCampaign = async (campaignData: any) => {
+    setIsSavingCampaign(true);
+    try {
+      const method = campaignData.id ? "PUT" : "POST";
+      const res = await fetch("/api/campaigns", {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(postData),
+        body: JSON.stringify(campaignData),
       });
-
-      const json = await res.json();
-      if (!json.success) {
-        throw new Error(json.error || "Failed to save post.");
-      }
-
-      showNotification(
-        json.message ||
-          (isEdit ? "Post updated successfully!" : "Post scheduled successfully!"),
-        "success"
-      );
-      setIsComposerOpen(false);
-      setEditingPost(null);
-      await fetchData();
-    } catch (err: any) {
-      alert(err.message || "Error saving post.");
-    } finally {
-      setIsSubmittingPost(false);
-    }
-  };
-
-  // Handler: Send Now
-  const handleSendNow = async (id: string) => {
-    try {
-      const res = await fetch(`/api/telegram/posts/${id}/send-now`, {
-        method: "POST",
-      });
-      const json = await res.json();
-      if (json.success) {
-        showNotification(json.message || "Broadcast delivered successfully!", "success");
-      } else {
-        showNotification(json.message || "Delivery encountered errors.", "error");
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to save campaign rule");
       }
       await fetchData();
-    } catch (err: any) {
-      alert(err.message || "Failed to broadcast post.");
-    }
-  };
-
-  // Handler: Retry
-  const handleRetry = async (id: string) => {
-    try {
-      const res = await fetch(`/api/telegram/posts/${id}/retry`, {
-        method: "POST",
+      setBlastFeedback({
+        show: true,
+        title: "Rule Saved Successfully!",
+        message: `Updated settings for "${data.campaign.name}" (${data.campaign.inactiveHoursThreshold}h inactivity, ${data.campaign.dripMinSeconds}s-${data.campaign.dripMaxSeconds}s drip).`,
+        count: 0,
       });
-      const json = await res.json();
-      if (json.success) {
-        showNotification(json.message || "Retry broadcast delivered successfully!", "success");
-      } else {
-        showNotification(json.message || "Retry encountered errors.", "error");
-      }
-      await fetchData();
+      setTimeout(() => setBlastFeedback(null), 4000);
+      return data.campaign;
     } catch (err: any) {
-      alert(err.message || "Failed to retry post.");
-    }
-  };
-
-  // Handler: Delete post
-  const handleDeletePost = async (id: string) => {
-    try {
-      const res = await fetch(`/api/telegram/posts/${id}`, {
-        method: "DELETE",
+      console.error("Save campaign error:", err);
+      setBlastFeedback({
+        show: true,
+        title: "Failed to Save Rule",
+        message: err.message || "An unexpected error occurred while saving the rule.",
+        count: 0,
       });
-      const json = await res.json();
-      if (json.success) {
-        showNotification("Post deleted.", "info");
-        await fetchData();
-      }
-    } catch (err: any) {
-      alert(err.message || "Failed to delete post.");
-    }
-  };
-
-  // Handler: Toggle Pause / Resume
-  const handleTogglePause = async (post: any) => {
-    try {
-      const newStatus = post.status === "PAUSED" ? "SCHEDULED" : "PAUSED";
-      const res = await fetch(`/api/telegram/posts/${post.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        showNotification(`Campaign ${newStatus === "PAUSED" ? "paused" : "resumed"}.`, "info");
-        await fetchData();
-      }
-    } catch (err: any) {
-      alert(err.message || "Failed to update status.");
-    }
-  };
-
-  // Handler: Duplicate post
-  const handleDuplicatePost = (post: any) => {
-    setEditingPost({
-      ...post,
-      id: undefined,
-      title: `${post.title} (Copy)`,
-      status: "SCHEDULED",
-    });
-    setIsComposerOpen(true);
-  };
-
-  // Handler: Use template in composer
-  const handleUseTemplate = (tmpl: any) => {
-    setEditingPost({
-      title: tmpl.title,
-      content: tmpl.content,
-      parseMode: tmpl.parseMode || "HTML",
-      mediaType: tmpl.mediaType || "none",
-      mediaUrl: tmpl.mediaUrl || null,
-      inlineButtons: tmpl.inlineButtons || null,
-    });
-    setIsComposerOpen(true);
-  };
-
-  // Handler: Calendar click day to schedule
-  const handleOpenNewPostWithDate = (date: Date) => {
-    const future = new Date(date);
-    future.setHours(9, 0, 0, 0);
-    setEditingPost({
-      scheduledAt: future.toISOString(),
-    });
-    setIsComposerOpen(true);
-  };
-
-  // Channels handlers
-  const handleAddChannel = async (data: { chatId: string; title?: string; botId?: string }) => {
-    const res = await fetch("/api/telegram/channels", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    const json = await res.json();
-    if (!json.success) {
-      const errorMsg = json.error || "Failed to add channel.";
-      showNotification(errorMsg, "error");
-      throw new Error(errorMsg);
-    }
-    showNotification("Telegram channel connected successfully!", "success");
-    await fetchData();
-  };
-
-  const handleRefreshChannel = async (id: string) => {
-    const res = await fetch("/api/telegram/channels", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      showNotification("Channel refreshed with latest data.", "success");
-      await fetchData();
-    }
-  };
-
-  const handleUpdateChannel = async (data: any) => {
-    const res = await fetch("/api/telegram/channels", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    const json = await res.json();
-    if (!json.success) {
-      showNotification(json.error || "Failed to update channel.", "error");
-      throw new Error(json.error || "Failed to update channel.");
-    }
-    showNotification("Channel updated successfully!", "success");
-    await fetchData();
-  };
-
-  const handleDeleteChannel = async (id: string) => {
-    try {
-      const res = await fetch(`/api/telegram/channels?id=${id}`, {
-        method: "DELETE",
-      });
-      const json = await res.json();
-      if (json.success) {
-        showNotification("Channel disconnected successfully.", "info");
-        // Optimistically update local state immediately so user is never stuck
-        setChannels((prev) => prev.filter((c) => c.id !== id));
-        await fetchData();
-      } else {
-        showNotification(json.error || "Failed to disconnect channel.", "error");
-        throw new Error(json.error || "Failed to disconnect channel.");
-      }
-    } catch (err: any) {
-      showNotification(err.message || "Failed to disconnect channel.", "error");
       throw err;
+    } finally {
+      setIsSavingCampaign(false);
     }
   };
 
-  // Bots handlers
-  const handleAddBot = async (botToken: string, name?: string) => {
-    const res = await fetch("/api/telegram/bots", {
+  // Handler: Campaign Blast All
+  const handleExecuteCampaignBlast = async (campaignId: string) => {
+    const activeCamp = campaigns.find((c) => c.id === campaignId) || campaigns[0];
+    const threshold = activeCamp?.inactiveHoursThreshold ?? thresholdHours;
+    const exclude24 = activeCamp?.excludePast24h ?? true;
+    const maxFollowUps = activeCamp?.maxFollowUps ?? 1;
+    const cooldownHours = activeCamp?.cooldownHours ?? 3.0;
+
+    const leadsToBlast = scannerData.leads.filter((l) => {
+      if (l.status === "REPLIED" || l.status === "CONVERTED" || l.status === "CLOSED") return false;
+      if (l.followUpCount >= maxFollowUps) return false;
+      if (exclude24 && !l.within24h) return false;
+
+      if (l.followUpCount === 0) {
+        if (l.status !== "AWAITING_CUSTOMER") return false;
+        return l.hoursUnresponsive >= threshold;
+      } else {
+        // Step 2+: Must satisfy cooldown period since last follow-up
+        return (l.hoursSinceLastFollowUp ?? 0) >= cooldownHours;
+      }
+    });
+
+    if (leadsToBlast.length === 0) {
+      setBlastFeedback({
+        show: true,
+        title: "No Eligible Leads",
+        message: `All leads are currently up to date or excluded by 24h Tag Safety.`,
+        count: 0,
+      });
+      setTimeout(() => setBlastFeedback(null), 4000);
+      return;
+    }
+
+    await runSequentialBlast(leadsToBlast, campaignId);
+  };
+
+  // Handler: Add Page
+  const handleAddPage = async (pageData: any) => {
+    await fetch("/api/pages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ botToken, name }),
+      body: JSON.stringify(pageData),
     });
-    const json = await res.json();
-    if (!json.success) {
-      const errorMsg = json.error || "Failed to connect bot.";
-      showNotification(errorMsg, "error");
-      throw new Error(errorMsg);
-    }
-    showNotification("Telegram Bot verified and connected!", "success");
     await fetchData();
   };
 
-  const handleDeleteBot = async (id: string) => {
-    const res = await fetch(`/api/telegram/bots?id=${id}`, {
-      method: "DELETE",
-    });
-    const json = await res.json();
-    if (json.success) {
-      showNotification("Bot removed.", "info");
-      await fetchData();
-    }
-  };
-
-  // Settings handlers
-  const handleUpdateSetting = async (key: string, value: string) => {
-    const res = await fetch("/api/telegram/settings", {
-      method: "POST",
+  // Handler: Toggle Page Active
+  const handleTogglePageActive = async (pageId: string, isActive: boolean) => {
+    await fetch("/api/pages", {
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [key]: value }),
+      body: JSON.stringify({ pageId, isActive }),
     });
-    const json = await res.json();
-    if (json.success) {
-      setSettings((prev) => ({ ...prev, [key]: value }));
-      showNotification("Settings updated.", "success");
-    }
+    await fetchData();
   };
 
-  // Showcase Demo Seeding
-  const handleSeedData = async () => {
-    setIsSeeding(true);
-    try {
-      const res = await fetch("/api/telegram/seed", { method: "POST" });
-      const json = await res.json();
-      if (json.success) {
-        showNotification("Showcase demo data populated successfully!", "success");
-        await fetchData();
-      }
-    } catch {
-      alert("Failed to seed demo data.");
-    } finally {
-      setIsSeeding(false);
-    }
+  // Handler: Delete Page
+  const handleDeletePage = async (pageId: string) => {
+    if (!confirm("Are you sure you want to disconnect this Facebook Page?")) return;
+    await fetch(`/api/pages?pageId=${pageId}`, { method: "DELETE" });
+    await fetchData();
   };
-
-  const upcomingPosts = posts.filter(
-    (p) => p.status === "SCHEDULED" && new Date(p.scheduledAt) >= new Date()
-  );
 
   return (
-    <div className="min-h-screen app-canvas flex flex-col font-sans selection:bg-blue-600 selection:text-white transition-colors duration-200">
-      {/* Toast Notification */}
-      {notification && (
-        <div className="fixed bottom-5 right-5 z-50 animate-bounce">
-          <div
-            className={`px-4 py-2.5 rounded-2xl text-xs font-semibold shadow-2xl flex items-center gap-2 border ${
-              notification.type === "success"
-                ? "bg-emerald-600 border-emerald-500 text-white shadow-emerald-500/20"
-                : notification.type === "error"
-                ? "bg-rose-600 border-rose-500 text-white shadow-rose-500/20"
-                : "bg-blue-600 border-blue-500 text-white shadow-blue-500/20"
-            }`}
-          >
-            <span>{notification.message}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Global Top Navbar */}
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+      {/* Top Navbar */}
       <Navbar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        onOpenNewPost={() => {
-          setEditingPost(null);
-          setIsComposerOpen(true);
-        }}
-        isSandbox={settings["sandbox_mode"] === "true"}
-        onToggleSandbox={() =>
-          handleUpdateSetting(
-            "sandbox_mode",
-            settings["sandbox_mode"] === "true" ? "false" : "true"
-          )
-        }
-        scheduledCount={stats.totalScheduled}
-        failedCount={stats.totalFailed}
-        user={currentUser}
-        onLogout={handleLogout}
+        isMockMode={isMockMode}
+        onToggleMockMode={handleToggleMockMode}
+        onResetDemoData={handleResetDemoData}
+        selectedPageId={selectedPageId}
+        onSelectPageId={setSelectedPageId}
+        pages={pages}
+        isRefreshing={isScanning}
+        onNavigateToPages={() => setActiveTab("pages")}
       />
 
-      {/* Main Tab Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === "dashboard" && (
-          <DashboardOverviewTab
-            stats={stats}
-            nextPost={nextPost}
-            upcomingPosts={upcomingPosts}
-            channels={channels}
-            templates={templates}
-            recentLogs={logs}
-            onOpenNewPost={() => {
-              setEditingPost(null);
-              setIsComposerOpen(true);
-            }}
-            onNavigateToTab={(tab) => setActiveTab(tab as any)}
-            onSendNow={handleSendNow}
-            onUseTemplate={handleUseTemplate}
-          />
+      {/* Main Container */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Blast Feedback Banner */}
+        {blastFeedback && (
+          <div className="bg-emerald-950/80 border border-emerald-500/50 rounded-2xl p-4 flex items-center justify-between shadow-2xl animate-in slide-in-from-top duration-300">
+            <div className="flex items-center space-x-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">{blastFeedback.title}</h4>
+                <p className="text-xs text-emerald-300/90">{blastFeedback.message}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setBlastFeedback(null)}
+              className="text-xs text-emerald-400 hover:text-white px-2 py-1"
+            >
+              ✕
+            </button>
+          </div>
         )}
 
-        {activeTab === "queue" && (
-          <QueueAndHistoryTab
-            posts={posts}
-            channels={channels}
-            onSendNow={handleSendNow}
-            onRetry={handleRetry}
-            onEdit={(post) => {
-              setEditingPost(post);
-              setIsComposerOpen(true);
-            }}
-            onDelete={handleDeletePost}
-            onTogglePause={handleTogglePause}
-            onDuplicate={handleDuplicatePost}
-            isLoading={isLoading}
-            onRefresh={fetchData}
-          />
-        )}
+        {/* Dashboard Top Overview Stats */}
+        <StatsCards
+          totalPages={pages.length}
+          totalLeads={scannerData.totalLeads}
+          awaitingCount={scannerData.awaitingCustomer}
+          unresponsiveCount={scannerData.unresponsiveCount}
+          urgent24hCount={scannerData.urgent24hCount}
+          followedUpCount={scannerData.followedUpCount}
+          thresholdHours={thresholdHours}
+          onNavigateToPages={() => setActiveTab("pages")}
+        />
 
-        {activeTab === "calendar" && (
-          <ContentCalendarTab
-            posts={posts}
-            onOpenNewPostWithDate={handleOpenNewPostWithDate}
-            onSelectPost={(post) => {
-              setEditingPost(post);
-              setIsComposerOpen(true);
-            }}
-          />
-        )}
+        {/* Navigation Tabs Bar */}
+        <div className="flex items-center space-x-1 border-b border-slate-800 pb-2 overflow-x-auto">
+          {[
+            {
+              id: "scanner",
+              label: "Inactive Lead Scanner",
+              icon: Radar,
+              badge: scannerData.unresponsiveCount > 0 ? scannerData.unresponsiveCount : null,
+            },
+            {
+              id: "bot-setup",
+              label: "Follow-Up Bot Setup",
+              icon: Bot,
+              badge: null,
+            },
+            {
+              id: "reports",
+              label: "Bot Performance & ROI",
+              icon: BarChart3,
+              badge: "ROI",
+            },
+            {
+              id: "pages",
+              label: "Facebook Pages",
+              icon: Layers,
+              badge: pages.length,
+            },
+            {
+              id: "logs",
+              label: "Blast Delivery Logs",
+              icon: History,
+              badge: logs.length > 0 ? logs.length : null,
+            },
+            {
+              id: "settings",
+              label: "API & Webhook Settings",
+              icon: Settings,
+              badge: null,
+            },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition shrink-0 ${
+                  isActive
+                    ? "bg-slate-800 text-white shadow-sm border border-slate-700"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${isActive ? "text-blue-400" : "text-slate-500"}`} />
+                <span>{tab.label}</span>
+                {tab.badge !== null && (
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      isActive
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-800 text-slate-400 border border-slate-700"
+                    }`}
+                  >
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-        {activeTab === "channels" && (
-          <ChannelsManagerTab
-            channels={channels}
-            bots={bots}
-            onAddChannel={handleAddChannel}
-            onUpdateChannel={handleUpdateChannel}
-            onRefreshChannel={handleRefreshChannel}
-            onDeleteChannel={handleDeleteChannel}
-            isLoading={isLoading}
-          />
-        )}
+        {/* Tab Content Rendering */}
+        <div className="pt-2">
+          {activeTab === "scanner" && (
+            <ScannerTab
+              leads={scannerData.leads}
+              thresholdHours={thresholdHours}
+              onThresholdChange={setThresholdHours}
+              onRefreshScan={handleRefreshScan}
+              isScanning={isScanning}
+              onTriggerBlast={handleTriggerBlast}
+              isBlasting={isBlasting}
+            />
+          )}
 
-        {activeTab === "templates" && (
-          <TemplatesTab
-            templates={templates}
-            onUseTemplate={handleUseTemplate}
-            onCreateTemplate={async (tmpl) => {
-              const res = await fetch("/api/telegram/templates", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(tmpl),
-              });
-              const json = await res.json();
-              if (json.success) {
-                showNotification("Template created successfully!", "success");
-                await fetchData();
-              }
-            }}
-            onDeleteTemplate={async (id) => {
-              const res = await fetch(`/api/telegram/templates?id=${id}`, {
-                method: "DELETE",
-              });
-              const json = await res.json();
-              if (json.success) {
-                showNotification("Template deleted.", "info");
-                await fetchData();
-              }
-            }}
-          />
-        )}
+          {activeTab === "bot-setup" && (
+            <BotSetupTab
+              campaigns={campaigns}
+              pages={pages}
+              onSaveCampaign={handleSaveCampaign}
+              onExecuteCampaignBlast={handleExecuteCampaignBlast}
+              isSaving={isSavingCampaign}
+              isBlasting={isBlasting}
+            />
+          )}
 
-        {activeTab === "logs" && (
-          <DeliveryLogsTab
-            logs={logs}
-            onRetryPost={handleRetry}
-            isLoading={isLoading}
-            onRefresh={fetchData}
-          />
-        )}
+          {activeTab === "pages" && (
+            <PagesManagerTab
+              pages={pages}
+              onAddPage={handleAddPage}
+              onTogglePageActive={handleTogglePageActive}
+              onDeletePage={handleDeletePage}
+              isMockMode={isMockMode}
+            />
+          )}
 
-        {activeTab === "settings" && (
-          <SettingsTab
-            bots={bots}
-            settings={settings}
-            onAddBot={handleAddBot}
-            onDeleteBot={handleDeleteBot}
-            onUpdateSetting={handleUpdateSetting}
-            onSeedData={handleSeedData}
-            isSeeding={isSeeding}
-          />
-        )}
+          {activeTab === "logs" && (
+            <BlastLogsTab
+              logs={logs}
+              totalDelivered={logStats.totalDelivered}
+              totalFailed={logStats.totalFailed}
+              onRefreshLogs={fetchData}
+              isLoading={isLoading}
+            />
+          )}
+
+          {activeTab === "settings" && (
+            <SettingsTab
+              isMockMode={isMockMode}
+              onToggleMockMode={handleToggleMockMode}
+            />
+          )}
+        </div>
       </main>
 
-      {/* Post Composer Modal */}
-      <PostComposerModal
-        isOpen={isComposerOpen}
-        onClose={() => {
-          setIsComposerOpen(false);
-          setEditingPost(null);
+      {/* Footer */}
+      <footer className="border-t border-slate-800/80 py-4 mt-12 bg-slate-950/80">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
+          <div className="flex items-center space-x-2">
+            <span className="font-semibold text-slate-400">SieReach Platform</span>
+            <span>•</span>
+            <span>Empowering business sales recovery across Facebook Business Pages</span>
+          </div>
+          <div className="flex items-center space-x-3">
+            <span>Meta Graph API v21.0 Ready</span>
+            <span>•</span>
+            <span className="text-emerald-400">Status: Healthy</span>
+          </div>
+        </div>
+      </footer>
+
+      {/* Live Blast Real-time Progress & Countdown Modal */}
+      <LiveBlastModal
+        isOpen={isLiveBlastOpen}
+        onClose={() => setIsLiveBlastOpen(false)}
+        total={liveBlastTotal}
+        current={liveBlastCurrent}
+        currentStepStatus={liveBlastStatus}
+        countdown={liveCountdown}
+        steps={liveSteps}
+        isFinished={isLiveFinished}
+        onStop={() => {
+          stopBlastRef.current = true;
+          setIsLiveFinished(true);
         }}
-        channels={channels}
-        templates={templates}
-        initialPost={editingPost}
-        onSave={handleSavePost}
-        isSubmitting={isSubmittingPost}
       />
     </div>
   );
