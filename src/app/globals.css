@@ -1,26 +1,388 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
+  --background: #020617;
+  --foreground: #f8fafc;
+  --card-bg: #0f172a;
+  --card-border: #1e293b;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ========================================================================= */
+/* LIGHT THEME PALETTE & CONTRAST SYSTEM                                     */
+/* ========================================================================= */
+html.light,
+html[data-theme="light"] {
+  color-scheme: light;
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --muted-text: #475569;
+  --heading-text: #0f172a;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
+body,
+.app-canvas {
+  background-color: var(--background, #020617);
+  color: var(--foreground, #f8fafc);
   font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* ========================================================================= */
+/* LIGHT THEME CONTAINER SURFACES & CARD ELEVATIONS                         */
+/* ========================================================================= */
+
+/* Main card containers: pure clean white with crisp subtle shadow */
+html.light [class*="bg-slate-900"]:not(button):not([class*="hover:bg-slate-900"]):not([class*="dark:bg-slate-900"]):not(.telegram-mockup-screen):not(.telegram-mockup-screen *) {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.03);
+}
+
+html.light [class*="bg-slate-900"]:not(button):not([class*="hover:bg-slate-900"]):not([class*="dark:bg-slate-900"]):not(.telegram-mockup-screen):not(.telegram-mockup-screen *):hover {
+  border-color: #cbd5e1 !important;
+}
+
+/* Canvas background & nested card sections: soft off-white surface */
+html.light [class*="bg-slate-950"]:not(.telegram-mockup-screen):not(.telegram-mockup-screen *) {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light [class*="bg-slate-850"]:not(.telegram-mockup-screen):not(.telegram-mockup-screen *) {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Borders and Dividers in light mode */
+html.light [class*="border-slate-800"],
+html.light [class*="border-slate-700"],
+html.light [class*="border-slate-900"] {
+  border-color: #e2e8f0 !important;
+}
+
+html.light [class*="divide-slate-800"] > * + * {
+  border-color: #e2e8f0 !important;
+}
+
+/* Sticky top header */
+html.light header {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  border-bottom-color: #e2e8f0 !important;
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+}
+
+/* Brand text in light mode */
+html.light header span.bg-clip-text {
+  background: linear-gradient(to right, #0f172a, #1e293b, #334155) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* ========================================================================= */
+/* LIGHT THEME HIGH-CONTRAST TYPOGRAPHY RULES                                */
+/* Ensures all text pops with rich charcoal/navy on light surfaces           */
+/* ========================================================================= */
+
+/* General headings and strong text (strictly excluding dark preview containers and solid buttons) */
+html.light h1:not(.telegram-mockup-screen *):not([class*="bg-blue-600"] *):not([class*="bg-emerald-600"] *):not([class*="bg-rose-600"] *):not([class*="bg-purple-600"] *):not([class*="from-blue-600"] *),
+html.light h2:not(.telegram-mockup-screen *):not([class*="bg-blue-600"] *):not([class*="bg-emerald-600"] *):not([class*="bg-rose-600"] *):not([class*="bg-purple-600"] *):not([class*="from-blue-600"] *),
+html.light h3:not(.telegram-mockup-screen *):not([class*="bg-blue-600"] *):not([class*="bg-emerald-600"] *):not([class*="bg-rose-600"] *):not([class*="bg-purple-600"] *):not([class*="from-blue-600"] *),
+html.light h4:not(.telegram-mockup-screen *):not([class*="bg-blue-600"] *):not([class*="bg-emerald-600"] *):not([class*="bg-rose-600"] *):not([class*="bg-purple-600"] *):not([class*="from-blue-600"] *),
+html.light .font-bold:not(.telegram-mockup-screen *):not([class*="bg-blue-600"]):not([class*="bg-blue-600"] *):not([class*="bg-emerald-600"]):not([class*="bg-emerald-600"] *):not([class*="bg-rose-600"]):not([class*="bg-rose-600"] *):not([class*="bg-purple-600"]):not([class*="bg-purple-600"] *):not([class*="from-blue-600"]):not([class*="from-blue-600"] *) {
+  color: #0f172a !important;
+}
+
+/* Text white replacement on normal light surfaces */
+html.light .text-white:not(.telegram-mockup-screen *):not([class*="bg-blue-600"]):not([class*="bg-blue-600"] *):not([class*="bg-emerald-600"]):not([class*="bg-emerald-600"] *):not([class*="bg-rose-600"]):not([class*="bg-rose-600"] *):not([class*="bg-purple-600"]):not([class*="bg-purple-600"] *):not([class*="from-blue-600"]):not([class*="from-blue-600"] *) {
+  color: #0f172a !important;
+}
+
+/* Slate text levels in light mode */
+html.light .text-slate-100:not(.telegram-mockup-screen *):not([class*="bg-blue-600"] *):not([class*="from-blue-600"] *),
+html.light .text-slate-200:not(.telegram-mockup-screen *):not([class*="bg-blue-600"] *):not([class*="from-blue-600"] *),
+html.light .text-slate-300:not(.telegram-mockup-screen *):not([class*="bg-blue-600"] *):not([class*="from-blue-600"] *) {
+  color: #1e293b !important; /* Deep navy-slate */
+}
+
+html.light .text-slate-400:not(.telegram-mockup-screen *):not([class*="bg-blue-600"] *):not([class*="from-blue-600"] *),
+html.light .text-slate-500:not(.telegram-mockup-screen *):not([class*="bg-blue-600"] *):not([class*="from-blue-600"] *) {
+  color: #475569 !important; /* Sharp, readable mid-slate */
+}
+
+html.light [class*="hover:text-slate-200"]:hover:not(.telegram-mockup-screen *):not([class*="bg-blue-600"] *),
+html.light [class*="hover:text-white"]:hover:not(.telegram-mockup-screen *):not([class*="bg-blue-600"] *) {
+  color: #0f172a !important;
+}
+
+/* ========================================================================= */
+/* PROTECTED SOLID BUTTONS & TOASTS (Always preserve pure white text)        */
+/* ========================================================================= */
+html.light [class*="bg-blue-600"],
+html.light [class*="bg-blue-600"] *,
+html.light [class*="bg-emerald-600"],
+html.light [class*="bg-emerald-600"] *,
+html.light [class*="bg-purple-600"],
+html.light [class*="bg-purple-600"] *,
+html.light [class*="bg-rose-600"],
+html.light [class*="bg-rose-600"] *,
+html.light [class*="from-blue-600"],
+html.light [class*="from-blue-600"] *,
+html.light button[class*="bg-blue-600"],
+html.light button[class*="bg-blue-600"] span,
+html.light button[class*="bg-emerald-600"],
+html.light button[class*="bg-emerald-600"] span,
+html.light button[class*="bg-rose-600"],
+html.light button[class*="bg-rose-600"] span {
+  color: #ffffff !important;
+}
+
+/* Secondary neutral buttons in light mode */
+html.light button[class*="bg-slate-800"]:not([class*="hover:bg-blue-600"]):not([class*="bg-blue-600"]),
+html.light button[class*="bg-slate-900"]:not([class*="hover:bg-blue-600"]):not([class*="bg-blue-600"]) {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light button[class*="bg-slate-800"]:hover:not([class*="hover:bg-blue-600"]):not([class*="bg-blue-600"]),
+html.light button[class*="bg-slate-900"]:hover:not([class*="hover:bg-blue-600"]):not([class*="bg-blue-600"]) {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* ========================================================================= */
+/* WELCOME HERO BANNER IN LIGHT MODE                                         */
+/* ========================================================================= */
+html.light .welcome-hero-banner {
+  background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 50%, #f5f3ff 100%) !important;
+  border-color: #bfdbfe !important;
+  box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.08) !important;
+}
+
+html.light .welcome-hero-banner .hero-badge {
+  background-color: #dbeafe !important;
+  border-color: #bfdbfe !important;
+  color: #1d4ed8 !important;
+}
+
+html.light .welcome-hero-banner .hero-badge * {
+  color: #1d4ed8 !important;
+}
+
+html.light .welcome-hero-banner .hero-heading {
+  color: #0f172a !important;
+}
+
+html.light .welcome-hero-banner .hero-desc {
+  color: #334155 !important;
+}
+
+html.light .welcome-hero-banner .hero-secondary-btn {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.05) !important;
+}
+
+html.light .welcome-hero-banner .hero-secondary-btn:hover {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* ========================================================================= */
+/* STATUS PILLS & BADGES (Clean pastel tints with deep jewel text)           */
+/* ========================================================================= */
+
+/* Delivered / Success / Active */
+html.light [class*="bg-emerald-500/10"],
+html.light [class*="bg-emerald-500/20"] {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+  color: #047857 !important;
+}
+html.light [class*="bg-emerald-500/10"] *,
+html.light [class*="bg-emerald-500/20"] * {
+  color: #047857 !important;
+}
+
+/* Amber / Warning / Sandbox */
+html.light [class*="bg-amber-500/10"],
+html.light [class*="bg-amber-500/20"] {
+  background-color: #fffbeb !important;
+  border-color: #fde68a !important;
+  color: #b45309 !important;
+}
+html.light [class*="bg-amber-500/10"] *,
+html.light [class*="bg-amber-500/20"] * {
+  color: #b45309 !important;
+}
+
+/* Rose / Error / Failed */
+html.light [class*="bg-rose-500/10"],
+html.light [class*="bg-rose-500/20"] {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  color: #be123c !important;
+}
+html.light [class*="bg-rose-500/10"] *,
+html.light [class*="bg-rose-500/20"] * {
+  color: #be123c !important;
+}
+
+/* Blue / Scheduled / Queued */
+html.light [class*="bg-blue-500/10"],
+html.light [class*="bg-blue-500/20"],
+html.light [class*="bg-blue-600/20"],
+html.light [class*="bg-blue-600/15"] {
+  background-color: #eff6ff !important;
+  border-color: #bfdbfe !important;
+  color: #1d4ed8 !important;
+}
+html.light [class*="bg-blue-500/10"] *,
+html.light [class*="bg-blue-500/20"] *,
+html.light [class*="bg-blue-600/20"] *,
+html.light [class*="bg-blue-600/15"] * {
+  color: #1d4ed8 !important;
+}
+
+/* Purple / Recurring Automations */
+html.light [class*="bg-purple-500/10"],
+html.light [class*="bg-purple-500/20"],
+html.light [class*="bg-purple-600/20"] {
+  background-color: #faf5ff !important;
+  border-color: #e9d5ff !important;
+  color: #7e22ce !important;
+}
+html.light [class*="bg-purple-500/10"] *,
+html.light [class*="bg-purple-500/20"] *,
+html.light [class*="bg-purple-600/20"] * {
+  color: #7e22ce !important;
+}
+
+/* ========================================================================= */
+/* FORM INPUTS & TEXTAREAS IN LIGHT MODE                                     */
+/* ========================================================================= */
+html.light input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(.bg-transparent),
+html.light textarea:not(.bg-transparent),
+html.light select:not(.bg-transparent) {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light input:focus,
+html.light textarea:focus,
+html.light select:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.light select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* Native date/time picker */
+html.light input[type="date"],
+html.light input[type="datetime-local"],
+html.light input[type="time"] {
+  color-scheme: light;
+}
+
+/* ========================================================================= */
+/* TABLES IN LIGHT MODE                                                      */
+/* ========================================================================= */
+html.light thead {
+  background-color: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+html.light thead th {
+  color: #475569 !important;
+  font-weight: 600 !important;
+}
+
+html.light tbody tr:hover {
+  background-color: #f8fafc !important;
+}
+
+html.light tbody tr {
+  border-color: #f1f5f9 !important;
+}
+
+/* ========================================================================= */
+/* CALENDAR GRID IN LIGHT MODE                                               */
+/* ========================================================================= */
+html.light .grid.grid-cols-7.divide-x > div {
+  border-color: #e2e8f0 !important;
+}
+
+html.light .grid.grid-cols-7.border-b {
+  background-color: #f8fafc !important;
+  border-bottom-color: #e2e8f0 !important;
+  color: #475569 !important;
+}
+
+/* ========================================================================= */
+/* TELEGRAM PHONE SIMULATOR (Protected Dark Theme Sandbox in all modes)      */
+/* ========================================================================= */
+.telegram-mockup-screen {
+  color-scheme: dark !important;
+  background-color: #0e1621 !important;
+  border-color: #1e2c3a !important;
+}
+
+.telegram-mockup-screen * {
+  color-scheme: dark !important;
+}
+
+html.light .telegram-mockup-screen {
+  background-color: #0e1621 !important;
+  border-color: #1e2c3a !important;
+}
+
+html.light .telegram-mockup-screen [class*="bg-[#182533]"] {
+  background-color: #182533 !important;
+  border-color: #232e3c !important;
+}
+
+html.light .telegram-mockup-screen .text-white,
+html.light .telegram-mockup-screen [class*="text-white"],
+html.light .telegram-mockup-screen .text-slate-100,
+html.light .telegram-mockup-screen [class*="text-slate-100"] {
+  color: #ffffff !important;
+}
+
+html.light .telegram-mockup-screen .text-slate-400,
+html.light .telegram-mockup-screen .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+html.light .telegram-mockup-screen a,
+html.light .telegram-mockup-screen [class*="text-sky"] {
+  color: #6ab2f2 !important;
+}
+
+html.light .telegram-mockup-screen [class*="bg-[#2b3a4a]"] {
+  background-color: #2b3a4a !important;
+  border-color: #3e4f62 !important;
+  color: #70b5f5 !important;
+}
+
+html.light .telegram-mockup-screen [class*="bg-[#2b3a4a]"]:hover {
+  background-color: #344659 !important;
+}
+
+/* Modal Backdrop */
+html.light .fixed.inset-0.bg-slate-950\/80 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
 }

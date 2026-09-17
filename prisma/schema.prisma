@@ -1,0 +1,238 @@
+// SieReach Prisma Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model FacebookPage {
+  id          String   @id @default(cuid())
+  pageId      String   @unique
+  name        String
+  category    String   @default("Business")
+  avatarUrl   String?
+  accessToken String   @default("")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  leads     LeadConversation[]
+  campaigns FollowUpCampaign[]
+  logs      BlastLog[]
+}
+
+model LeadConversation {
+  id                    String    @id @default(cuid())
+  pageId                String
+  page                  FacebookPage @relation(fields: [pageId], references: [pageId], onDelete: Cascade)
+  psid                  String
+  customerName          String
+  customerAvatar        String?
+  adSource              String?
+  lastCustomerMessage   String
+  lastCustomerMessageAt DateTime
+  lastAgentMessage      String
+  lastAgentMessageAt    DateTime
+  status                String    @default("AWAITING_CUSTOMER") // AWAITING_CUSTOMER, FOLLOWED_UP, REPLIED, CONVERTED, CLOSED
+  followUpCount         Int       @default(0)
+  lastFollowedUpAt      DateTime?
+  firstFollowedUpAt     DateTime?
+  secondFollowedUpAt    DateTime?
+  repliedAt             DateTime?
+  repliedAfterStep      Int?      // 1 if customer replied after Step 1, 2 if after Step 2
+  notes                 String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  logs BlastLog[]
+
+  @@unique([pageId, psid])
+}
+
+model FollowUpCampaign {
+  id                     String    @id @default(cuid())
+  name                   String
+  pageId                 String?   // null if applies to all pages
+  page                   FacebookPage? @relation(fields: [pageId], references: [pageId], onDelete: SetNull)
+  inactiveHoursThreshold Float     @default(24.0) // detect customer not responding after this many hours
+  messageTemplate        String
+  imageUrl               String?
+  messageTag             String?   @default("HUMAN_AGENT")
+  autoBlast              Boolean   @default(false)
+  excludePast24h         Boolean   @default(true) // Exclude leads >24h requiring HUMAN_AGENT tag by default
+  dripMinSeconds         Float     @default(3.0)  // Minimum random interval delay between messages (min 3s)
+  dripMaxSeconds         Float     @default(5.0)  // Maximum random interval delay between messages
+  maxFollowUps           Int       @default(1)    // Default to 1 follow-up; max 2 allowed
+  cooldownHours          Float     @default(3.0)  // Minimum waiting time (hours) before Step 2 (e.g. 3h)
+  step2CampaignId        String?                  // Optional: ID of different blast rule/campaign to use for Step 2
+  step2MessageTemplate   String?                  // Optional: Custom message template for Step 2
+  step2ImageUrl          String?                  // Optional: Custom image for Step 2
+  isActive               Boolean   @default(true)
+  lastRunAt              DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  logs BlastLog[]
+}
+
+model BlastLog {
+  id            String    @id @default(cuid())
+  campaignId    String?
+  campaign      FollowUpCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  pageId        String
+  page          FacebookPage @relation(fields: [pageId], references: [pageId], onDelete: Cascade)
+  leadId        String?
+  lead          LeadConversation? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  recipientPsid String
+  recipientName String
+  messageSent   String
+  imageUrl      String?
+  status        String    // DELIVERED, FAILED, POLICY_VIOLATION_SKIPPED
+  step          Int       @default(1) // Step 1 or Step 2
+  respondedAt   DateTime?
+  errorMessage  String?
+  sentAt        DateTime  @default(now())
+}
+
+model SystemSetting {
+  key         String   @id
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+// ==========================================
+// TELEGRAM SCHEDULER MODELS
+// ==========================================
+
+model TelegramBot {
+  id                  String   @id @default(cuid())
+  name                String
+  botToken            String   @unique
+  username            String?
+  firstName           String?
+  canJoinGroups       Boolean  @default(true)
+  canReadAllGroupMsgs Boolean  @default(false)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  channels            TelegramChannel[]
+}
+
+model TelegramChannel {
+  id              String   @id @default(cuid())
+  botId           String?
+  bot             TelegramBot? @relation(fields: [botId], references: [id], onDelete: SetNull)
+  chatId          String   @unique // e.g. "@mychannel" or "-100192837482"
+  title           String
+  username        String?  // e.g. "mychannel"
+  type            String   @default("channel") // channel, supergroup, group
+  memberCount     Int      @default(0)
+  isBotAdmin      Boolean  @default(true)
+  canPostMessages Boolean  @default(true)
+  avatarUrl       String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  postTargets     ScheduledPostTarget[]
+  deliveryLogs    PostDeliveryLog[]
+}
+
+model ScheduledPost {
+  id                      String    @id @default(cuid())
+  title                   String    // Internal reference / label
+  content                 String    // Text / caption
+  parseMode               String    @default("HTML") // HTML, MarkdownV2, Plain
+  mediaType               String    @default("none") // none, photo, video, document
+  mediaUrl                String?   // Media URL if any
+  inlineButtons           String?   // JSON array string: [[{ text, url }]]
+  isPinned                Boolean   @default(false)
+  isSilent                Boolean   @default(false)
+  disablePreview          Boolean   @default(false)
+  
+  // Status: DRAFT, SCHEDULED, PUBLISHING, PUBLISHED, FAILED, PAUSED, CANCELLED
+  status                  String    @default("SCHEDULED")
+  scheduledAt             DateTime
+  
+  // Recurrence configuration
+  isRecurring             Boolean   @default(false)
+  recurrenceRule          String?   // daily, weekly, custom_days, interval_hours
+  recurrenceDays          String?   // JSON array e.g. '["MON","WED","FRI"]'
+  recurrenceTime          String?   // e.g. "09:00"
+  recurrenceIntervalHours Float?   // e.g. 6.0
+  recurrenceEndDate       DateTime?
+  totalSentCount          Int       @default(0)
+  lastRunAt               DateTime?
+  nextRunAt               DateTime?
+
+  templateId              String?
+  template                PostTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  targets                 ScheduledPostTarget[]
+  deliveryLogs            PostDeliveryLog[]
+}
+
+model ScheduledPostTarget {
+  id        String          @id @default(cuid())
+  postId    String
+  post      ScheduledPost   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  channelId String
+  channel   TelegramChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  createdAt DateTime        @default(now())
+
+  @@unique([postId, channelId])
+}
+
+model PostDeliveryLog {
+  id                 String           @id @default(cuid())
+  postId             String?
+  post               ScheduledPost?   @relation(fields: [postId], references: [id], onDelete: SetNull)
+  channelId          String?
+  channel            TelegramChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  chatId             String
+  channelTitle       String
+  status             String           // SUCCESS, FAILED, SIMULATED
+  telegramMessageId  String?
+  telegramMessageUrl String?
+  errorMessage       String?
+  sentAt             DateTime         @default(now())
+  retryCount         Int              @default(0)
+}
+
+model PostTemplate {
+  id            String          @id @default(cuid())
+  title         String
+  category      String          @default("Promotional") // Promotional, Announcement, Daily Tips, Giveaway, Engagement
+  content       String
+  parseMode     String          @default("HTML")
+  mediaType     String          @default("none")
+  mediaUrl      String?
+  inlineButtons String?
+  tags          String?         // Comma-separated tags
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  posts         ScheduledPost[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("ADMIN") // ADMIN, CLIENT
+  avatarUrl    String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+
