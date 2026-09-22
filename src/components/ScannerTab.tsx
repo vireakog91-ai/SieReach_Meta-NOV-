@@ -342,13 +342,28 @@ export function ScannerTab({
                         {/* 3. Conversation Status & Inactivity (Shortened) */}
                         <td className="py-2.5 px-2">
                           <div className="space-y-1 min-w-0">
-                            {/* Shortened conversation snippet */}
-                            <div
-                              className="text-xs text-slate-700 dark:text-slate-300 truncate cursor-help flex items-center gap-1"
-                              title={`Customer: "${lead.lastCustomerMessage}"\nSales Rep: "${lead.lastAgentMessage}"`}
-                            >
-                              <span className="text-slate-400 font-medium text-[11px] shrink-0">Customer:</span>
-                              <span className="truncate text-slate-600 dark:text-slate-400">“{lead.lastCustomerMessage}”</span>
+                            {/* Shortened conversation snippet showing both customer inquiry and sales rep reply */}
+                            <div className="space-y-0.5 min-w-0">
+                              <div
+                                className="text-xs truncate cursor-help flex items-center gap-1.5"
+                                title={`Customer: "${lead.lastCustomerMessage}"`}
+                              >
+                                <span className="text-slate-400 font-bold text-[10px] uppercase shrink-0">Cust:</span>
+                                <span className="truncate text-slate-700 dark:text-slate-300">“{lead.lastCustomerMessage}”</span>
+                              </div>
+                              {lead.lastAgentMessage && lead.lastAgentMessage !== "Awaiting initial agent response" && (
+                                <div
+                                  className="text-[11px] truncate cursor-help flex items-center gap-1.5 text-slate-500 dark:text-slate-400"
+                                  title={`Sales Rep: "${lead.lastAgentMessage}"`}
+                                >
+                                  <span className="text-blue-500 font-bold text-[10px] uppercase shrink-0">Rep:</span>
+                                  <span className="truncate text-blue-600 dark:text-blue-400 font-medium">
+                                    {lead.lastAgentMessage.startsWith("🎙️") || lead.lastAgentMessage.startsWith("📷") || lead.lastAgentMessage.startsWith("🎬")
+                                      ? lead.lastAgentMessage
+                                      : `“${lead.lastAgentMessage}”`}
+                                  </span>
+                                </div>
+                              )}
                             </div>
 
                             {/* Shortened inactivity badge */}

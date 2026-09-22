@@ -40,9 +40,22 @@ export async function POST(req: NextRequest) {
           for (const event of entry.messaging) {
             const senderPsid = event.sender?.id;
 
+            // Helper to determine message text or media type
+            const resolveEventText = (msg: any): string => {
+              if (msg.text && msg.text.trim()) return msg.text.trim();
+              if (msg.attachments && msg.attachments.length > 0) {
+                const attType = msg.attachments[0]?.type;
+                if (attType === "audio") return "🎙️ Voice message";
+                if (attType === "image") return "📷 Photo";
+                if (attType === "video") return "🎬 Video";
+                return "📎 Attachment";
+              }
+              return "No text message";
+            };
+
             // Inbound message from customer
             if (event.message && !event.message.is_echo) {
-              const text = event.message.text || "[Attachment/Media]";
+              const text = resolveEventText(event.message);
 
               const now = new Date();
               const existingLead = await prisma.leadConversation.findUnique({
@@ -100,6 +113,25 @@ export async function POST(req: NextRequest) {
                     data: { respondedAt: now },
                   });
                 }
+              }
+            } else if (event.message && event.message.is_echo) {
+              // Outbound reply sent by human sales rep or automated agent from Meta Business Suite / Messenger
+              const recipientPsid = event.recipient?.id;
+              if (recipientPsid) {
+                const agentText = resolveEventText(event.message);
+                const now = new Date();
+
+                await prisma.leadConversation.updateMany({
+                  where: {
+                    pageId,
+                    psid: recipientPsid,
+                  },
+                  data: {
+                    lastAgentMessage: agentText,
+                    lastAgentMessageAt: now,
+                    status: "AWAITING_CUSTOMER",
+                  },
+                });
               }
             }
           }

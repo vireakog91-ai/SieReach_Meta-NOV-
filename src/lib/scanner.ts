@@ -56,11 +56,33 @@ async function syncLiveConversations(pageIdFilter?: string | null) {
       if (!page.accessToken || page.accessToken.startsWith("EAAB_mock_")) continue;
 
       try {
-        const url = `https://graph.facebook.com/v21.0/${page.pageId}/conversations?fields=id,updated_time,participants,messages.limit(10){id,message,from,created_time}&access_token=${encodeURIComponent(
+        const url = `https://graph.facebook.com/v21.0/${page.pageId}/conversations?fields=id,updated_time,participants,messages.limit(10){id,message,from,created_time,attachments}&access_token=${encodeURIComponent(
           page.accessToken
         )}`;
         const res = await fetch(url);
         const data = await res.json();
+
+        // Helper to format messages, attachments, and voice notes
+        const formatMessageContent = (msgObj: any, fallback: string): string => {
+          if (!msgObj) return fallback;
+          if (msgObj.message && msgObj.message.trim()) return msgObj.message.trim();
+          if (msgObj.attachments?.data?.length > 0) {
+            const att = msgObj.attachments.data[0];
+            const mime = att.mime_type || "";
+            const name = att.name || "";
+            if (mime.startsWith("audio/") || name.includes("audioclip") || name.endsWith(".mp4") || name.endsWith(".m4a")) {
+              return "🎙️ Voice message";
+            }
+            if (mime.startsWith("image/")) {
+              return "📷 Photo";
+            }
+            if (mime.startsWith("video/")) {
+              return "🎬 Video";
+            }
+            return "📎 Attachment";
+          }
+          return fallback;
+        };
 
         for (const conv of data.data || []) {
           const customer = (conv.participants?.data || []).find((p: any) => p.id !== page.pageId);
@@ -70,12 +92,12 @@ async function syncLiveConversations(pageIdFilter?: string | null) {
           const customerMsg = messages.find((m: any) => m.from?.id === customer.id);
           const agentMsg = messages.find((m: any) => m.from?.id === page.pageId);
 
-          const custText = customerMsg?.message || "No text message";
+          const custText = formatMessageContent(customerMsg, "No text message");
           const custTime = customerMsg?.created_time
             ? new Date(customerMsg.created_time)
             : new Date(conv.updated_time);
           const hasAgentReplied = Boolean(agentMsg);
-          const agentText = agentMsg?.message || "Awaiting initial agent response";
+          const agentText = formatMessageContent(agentMsg, "Awaiting initial agent response");
           const agentTime = agentMsg?.created_time
             ? new Date(agentMsg.created_time)
             : null;
