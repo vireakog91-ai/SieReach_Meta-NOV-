@@ -4,6 +4,13 @@
 import "dotenv/config";
 import { defineConfig, env } from "prisma/config";
 
+const dbUrl =
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_PRISMA_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.STORAGE_URL ||
+  "";
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
@@ -11,6 +18,6 @@ export default defineConfig({
   },
   engine: "classic",
   datasource: {
-    url: env("DATABASE_URL"),
+    url: dbUrl,
   },
 });
