@@ -143,7 +143,16 @@ export default function SieReachDashboard() {
 
       if (portRes?.ok) {
         const portJson = await portRes.json();
-        if (portJson.success) setPortfolios(portJson.portfolios || []);
+        if (portJson.success && portJson.portfolios) {
+          setPortfolios(portJson.portfolios);
+          setSelectedBusiness((prev) => {
+            if (prev === "ALL") return prev;
+            if (portJson.portfolios.length > 0 && !portJson.portfolios.some((p: any) => p.name === prev)) {
+              return portJson.portfolios[0].name;
+            }
+            return prev;
+          });
+        }
       }
 
       if (pagesRes?.ok) {

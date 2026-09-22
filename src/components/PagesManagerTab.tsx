@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Layers,
   CheckCircle2,
@@ -73,7 +73,7 @@ export function PagesManagerTab({
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState("Business Page");
   const [newBusinessName, setNewBusinessName] = useState<string>(
-    activeBusiness !== "ALL" ? activeBusiness : "SieLab Retail Group"
+    activeBusiness !== "ALL" ? activeBusiness : portfolios[0]?.name || "SieLab Retail Group"
   );
   const [newToken, setNewToken] = useState("");
   const [newAvatar, setNewAvatar] = useState("");
@@ -89,6 +89,17 @@ export function PagesManagerTab({
   const [syncingPageId, setSyncingPageId] = useState<string | null>(null);
   const [pageToDelete, setPageToDelete] = useState<PageItem | null>(null);
   const [isDeletingPage, setIsDeletingPage] = useState(false);
+
+  // Synchronize newBusinessName whenever portfolios load or modal opens
+  useEffect(() => {
+    if (portfolios && portfolios.length > 0) {
+      if (activeBusiness && activeBusiness !== "ALL" && portfolios.some((p) => p.name === activeBusiness)) {
+        setNewBusinessName(activeBusiness);
+      } else if (!portfolios.some((p) => p.name === newBusinessName)) {
+        setNewBusinessName(portfolios[0].name);
+      }
+    }
+  }, [portfolios, activeBusiness, showAddModal]);
 
   const handleConfirmDeletePage = async () => {
     if (!pageToDelete) return;
