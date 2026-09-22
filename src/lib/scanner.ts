@@ -52,15 +52,23 @@ async function syncLiveConversations(pageIdFilter?: string | null) {
       },
     });
 
+    // Smart 36-Hour Lookback Window Cutoff:
+    // Captures 100% of leads within the 24H window + 12h grace buffer.
+    // Early-exits as soon as conversations become older than 36h to avoid querying dead historical data.
+    const nowMs = Date.now();
+    const maxLookbackMs = 36 * 60 * 60 * 1000;
+    const cutoffTimestamp = nowMs - maxLookbackMs;
+
     for (const page of pages) {
       if (!page.accessToken || page.accessToken.startsWith("EAAB_mock_")) continue;
 
       try {
-        const url = `https://graph.facebook.com/v21.0/${page.pageId}/conversations?fields=id,updated_time,participants,messages.limit(10){id,message,from,created_time,attachments}&access_token=${encodeURIComponent(
+        let nextUrl: string | null = `https://graph.facebook.com/v21.0/${page.pageId}/conversations?limit=100&fields=id,updated_time,participants,messages.limit(10){id,message,from,created_time,attachments}&access_token=${encodeURIComponent(
           page.accessToken
         )}`;
-        const res = await fetch(url);
-        const data = await res.json();
+        let batchCount = 0;
+        const maxBatches = 3; // Allows up to 300 active leads per page
+        let reachedCutoff = false;
 
         // Helper to format messages, attachments, and voice notes
         const formatMessageContent = (msgObj: any, fallback: string): string => {
@@ -84,15 +92,31 @@ async function syncLiveConversations(pageIdFilter?: string | null) {
           return fallback;
         };
 
-        for (const conv of data.data || []) {
-          const customer = (conv.participants?.data || []).find((p: any) => p.id !== page.pageId);
-          if (!customer) continue;
+        while (nextUrl && batchCount < maxBatches && !reachedCutoff) {
+          const response: Response = await fetch(nextUrl);
+          const data: any = await response.json();
+          batchCount++;
 
-          const messages = conv.messages?.data || [];
-          const customerMsg = messages.find((m: any) => m.from?.id === customer.id);
-          const agentMsg = messages.find((m: any) => m.from?.id === page.pageId);
+          const conversations = data.data || [];
+          if (conversations.length === 0) break;
 
-          const custText = formatMessageContent(customerMsg, "No text message");
+          for (const conv of conversations) {
+            const convUpdated = conv.updated_time ? new Date(conv.updated_time).getTime() : 0;
+            // Meta orders conversations descending by updated_time (newest first).
+            // Stop scanning as soon as we cross the 36-hour window boundary.
+            if (convUpdated > 0 && convUpdated < cutoffTimestamp) {
+              reachedCutoff = true;
+              break;
+            }
+
+            const customer = (conv.participants?.data || []).find((p: any) => p.id !== page.pageId);
+            if (!customer) continue;
+
+            const messages = conv.messages?.data || [];
+            const customerMsg = messages.find((m: any) => m.from?.id === customer.id);
+            const agentMsg = messages.find((m: any) => m.from?.id === page.pageId);
+
+            const custText = formatMessageContent(customerMsg, "No text message");
           const custTime = customerMsg?.created_time
             ? new Date(customerMsg.created_time)
             : new Date(conv.updated_time);
@@ -198,6 +222,10 @@ async function syncLiveConversations(pageIdFilter?: string | null) {
             }
           }
         }
+
+        if (reachedCutoff) break;
+        nextUrl = data.paging?.next || null;
+      }
       } catch (pageErr) {
         console.error(`Error syncing page ${page.pageId}:`, pageErr);
       }
