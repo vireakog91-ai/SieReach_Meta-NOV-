@@ -212,10 +212,13 @@ async function syncLiveConversations(pageIdFilter?: string | null) {
  */
 export async function scanInactiveLeads(
   thresholdHours: number = 24.0,
-  pageIdFilter?: string | null
+  pageIdFilter?: string | null,
+  skipSync: boolean = false
 ): Promise<ScannerSummary> {
-  // Sync latest live conversations from Meta Graph API if active pages exist
-  await syncLiveConversations(pageIdFilter);
+  // Sync latest live conversations from Meta Graph API if active pages exist and not skipped
+  if (!skipSync) {
+    await syncLiveConversations(pageIdFilter);
+  }
 
   const now = new Date();
 

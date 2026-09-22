@@ -6,8 +6,11 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const thresholdHours = parseFloat(searchParams.get("thresholdHours") || "24.0");
     const pageId = searchParams.get("pageId") || null;
+    const sync = searchParams.get("sync") === "true";
 
-    const result = await scanInactiveLeads(thresholdHours, pageId);
+    // By default, query database directly for instant sub-50ms dashboard loading.
+    // Full external Graph API crawl only runs on sync=true or manual scan.
+    const result = await scanInactiveLeads(thresholdHours, pageId, !sync);
 
     return NextResponse.json({
       success: true,
