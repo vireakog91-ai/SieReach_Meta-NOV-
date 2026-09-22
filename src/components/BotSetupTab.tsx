@@ -205,15 +205,22 @@ export function BotSetupTab({
     }
   };
 
-  const isInitializedRef = React.useRef(false);
+  const isFirstLoadRef = React.useRef(true);
 
-  // Automatically select and populate first campaign when campaigns load from API
+  // Automatically select and populate first campaign when campaigns load or portfolio changes
   React.useEffect(() => {
-    if (campaigns.length > 0 && !isInitializedRef.current) {
-      isInitializedRef.current = true;
-      handleSelectCampaign(campaigns[0]);
+    if (campaigns.length > 0) {
+      if (isFirstLoadRef.current) {
+        isFirstLoadRef.current = false;
+        handleSelectCampaign(campaigns[0]);
+      } else {
+        const currentExists = campaigns.some((c) => c.id === selectedId);
+        if (!currentExists && selectedId !== "new") {
+          handleSelectCampaign(campaigns[0]);
+        }
+      }
     }
-  }, [campaigns]);
+  }, [campaigns, selectedId]);
 
   // Quick image preset flyers
   const sampleImages = [
