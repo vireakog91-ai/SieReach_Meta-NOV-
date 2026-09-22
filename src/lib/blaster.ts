@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { renderMessageTemplate, sendFacebookMessage } from "./facebook";
+import { renderMessageTemplate, sendFacebookMessage, parseSpintax } from "./facebook";
 
 export interface BlastRequest {
   campaignId?: string;
@@ -90,8 +90,18 @@ export async function executeFollowUpBlast(
   const dripMax = Math.max(dripMin, reqDripMax ?? campaign?.dripMaxSeconds ?? 5.0);
 
   // Target leads query: In multi-step mode, target leads who haven't reached max follow-ups
+  // Strict Business Portfolio Isolation: Target leads strictly within the campaign's dedicated business portfolio
+  const pageFilter: any = {};
+  if (targetPageId) {
+    pageFilter.pageId = targetPageId;
+  } else if (campaign?.pageId) {
+    pageFilter.pageId = campaign.pageId;
+  } else if (campaign?.businessName) {
+    pageFilter.page = { businessName: campaign.businessName };
+  }
+
   const whereClause: any = {
-    ...(targetPageId ? { pageId: targetPageId } : {}),
+    ...pageFilter,
     ...(leadIds && leadIds.length > 0
       ? { id: { in: leadIds } }
       : {
@@ -186,17 +196,41 @@ export async function executeFollowUpBlast(
     let leadTemplate = templateToUse;
     let leadImage = imageToUse;
 
+    // Image Spin Resolution: If multiple posters configured and spin is enabled, pick random poster for this lead
+    if (campaign?.enableImageSpin && campaign?.imageUrls) {
+      try {
+        const urls: string[] = typeof campaign.imageUrls === "string" ? JSON.parse(campaign.imageUrls) : campaign.imageUrls;
+        const validUrls = Array.isArray(urls) ? urls.filter(Boolean) : [];
+        if (validUrls.length > 0) {
+          leadImage = validUrls[Math.floor(Math.random() * validUrls.length)];
+        }
+      } catch (err) {
+        // fallback to imageToUse
+      }
+    } else if (leadImage && leadImage.includes("{") && leadImage.includes("|")) {
+      leadImage = parseSpintax(leadImage);
+    }
+
     if (lead.followUpCount === 1) {
       if (step2Campaign) {
         leadTemplate = step2Campaign.messageTemplate || leadTemplate;
         leadImage = step2Campaign.imageUrl ?? leadImage;
+        if (step2Campaign.enableImageSpin && step2Campaign.imageUrls) {
+          try {
+            const s2Urls = JSON.parse(step2Campaign.imageUrls);
+            const validS2Urls = Array.isArray(s2Urls) ? s2Urls.filter(Boolean) : [];
+            if (validS2Urls.length > 0) {
+              leadImage = validS2Urls[Math.floor(Math.random() * validS2Urls.length)];
+            }
+          } catch (e) {}
+        }
       } else if (campaign?.step2MessageTemplate) {
         leadTemplate = campaign.step2MessageTemplate;
         leadImage = campaign.step2ImageUrl ?? leadImage;
       }
     }
 
-    // Format personalized message text
+    // Format personalized message text with dynamic Spintax resolution
     const personalizedText = renderMessageTemplate(leadTemplate, {
       customerName: lead.customerName,
       pageName: lead.page.name,

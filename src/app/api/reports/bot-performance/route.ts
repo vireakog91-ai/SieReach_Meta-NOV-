@@ -65,6 +65,7 @@ export async function GET(req: NextRequest) {
         pageId: true,
         name: true,
         category: true,
+        businessName: true,
         avatarUrl: true,
       },
     });
@@ -269,6 +270,7 @@ export async function GET(req: NextRequest) {
         pageName: page.name,
         pageCategory: page.category,
         avatarUrl: page.avatarUrl,
+        businessName: page.businessName || "SieLab Retail Group",
         totalTargeted: pTotalTargeted,
         totalBlasts: pageLogs.length,
         step1Blasts: pStep1Logs.length,

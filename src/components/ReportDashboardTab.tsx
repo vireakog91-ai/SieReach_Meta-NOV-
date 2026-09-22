@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 
 interface ReportDashboardTabProps {
-  pages: Array<{ pageId: string; name: string }>;
+  pages: Array<{ pageId: string; name: string; businessName?: string }>;
 }
 
 export function ReportDashboardTab({ pages }: ReportDashboardTabProps) {
@@ -219,11 +219,35 @@ export function ReportDashboardTab({ pages }: ReportDashboardTabProps) {
                 <option value="ALL">
                   All Facebook Pages ({pages.length})
                 </option>
-                {pages.map((p) => (
-                  <option key={p.pageId} value={p.pageId}>
-                    {p.name}
-                  </option>
-                ))}
+                {Array.from(
+                  new Set(
+                    pages.map(
+                      (p) =>
+                        p.businessName ||
+                        (p.pageId === "fb_page_05" ? "Moew Hospitality" : "SieLab Retail Group")
+                    )
+                  )
+                ).map((bName) => {
+                  const groupPages = pages.filter(
+                    (p) =>
+                      (p.businessName ||
+                        (p.pageId === "fb_page_05" ? "Moew Hospitality" : "SieLab Retail Group")) === bName
+                  );
+                  return (
+                    <optgroup
+                      key={bName}
+                      label={`${bName.includes("Moew") ? "☕" : "🏢"} ${bName} (${groupPages.length} ${
+                        groupPages.length > 1 ? "Pages" : "Page"
+                      })`}
+                    >
+                      {groupPages.map((p) => (
+                        <option key={p.pageId} value={p.pageId}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
               </select>
             </div>
 
@@ -321,7 +345,7 @@ export function ReportDashboardTab({ pages }: ReportDashboardTabProps) {
             <button
               onClick={fetchReport}
               disabled={isLoading}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition disabled:opacity-50"
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-300 dark:border-slate-700 transition disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-blue-400" : ""}`} />
               <span>Refresh</span>
@@ -553,7 +577,21 @@ export function ReportDashboardTab({ pages }: ReportDashboardTabProps) {
                       />
                       <div>
                         <div className="font-semibold text-white">{page.pageName}</div>
-                        <div className="text-[10px] text-slate-500">{page.pageCategory}</div>
+                        <div className="flex items-center space-x-2 mt-0.5">
+                          <span className="text-[10px] text-slate-400">{page.pageCategory}</span>
+                          <span className="text-slate-600">•</span>
+                          <span
+                            className={`inline-flex items-center text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                              (page.businessName || "").includes("Moew") || page.pageId === "fb_page_05"
+                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                            }`}
+                          >
+                            {(page.businessName || "").includes("Moew") || page.pageId === "fb_page_05"
+                              ? "☕ Moew Hospitality"
+                              : "🏢 SieLab Retail Group"}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -593,8 +631,8 @@ export function ReportDashboardTab({ pages }: ReportDashboardTabProps) {
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
                         page.step2IncrementalLift > 0
-                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                          : "bg-slate-800 text-slate-400"
+                          ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 dark:text-emerald-400"
+                          : "bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-transparent"
                       }`}
                     >
                       +{page.step2IncrementalLift}%

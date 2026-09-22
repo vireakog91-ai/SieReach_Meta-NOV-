@@ -23,6 +23,7 @@ interface PageItem {
   pageId: string;
   name: string;
   category: string;
+  businessName?: string;
   avatarUrl?: string | null;
   accessToken: string;
   isActive: boolean;
@@ -37,10 +38,15 @@ interface PageItem {
 
 interface PagesManagerTabProps {
   pages: PageItem[];
+  portfolios?: Array<{ id: string; name: string; icon?: string; industry?: string; description?: string }>;
+  activeBusiness?: string;
+  onSelectBusiness?: (businessName: string) => void;
+  onOpenCreatePortfolio?: () => void;
   onAddPage: (page: {
     pageId: string;
     name: string;
     category: string;
+    businessName?: string;
     accessToken: string;
     avatarUrl?: string;
   }) => Promise<void>;
@@ -52,6 +58,10 @@ interface PagesManagerTabProps {
 
 export function PagesManagerTab({
   pages,
+  portfolios = [],
+  activeBusiness = "ALL",
+  onSelectBusiness,
+  onOpenCreatePortfolio,
   onAddPage,
   onTogglePageActive,
   onDeletePage,
@@ -62,6 +72,9 @@ export function PagesManagerTab({
   const [newPageId, setNewPageId] = useState("");
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState("Business Page");
+  const [newBusinessName, setNewBusinessName] = useState<string>(
+    activeBusiness !== "ALL" ? activeBusiness : "SieLab Retail Group"
+  );
   const [newToken, setNewToken] = useState("");
   const [newAvatar, setNewAvatar] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -136,6 +149,7 @@ export function PagesManagerTab({
         pageId: newPageId.trim(),
         name: newName || fetchedProfile?.name || `Facebook Page (${newPageId.slice(-4)})`,
         category: newCategory || fetchedProfile?.category || "Business Page",
+        businessName: newBusinessName || (activeBusiness !== "ALL" ? activeBusiness : "SieLab Retail Group"),
         accessToken: newToken || (isMockMode ? `EAAB_mock_${newPageId}` : ""),
         avatarUrl:
           newAvatar ||
@@ -160,18 +174,32 @@ export function PagesManagerTab({
       {/* Header & Add Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-white flex items-center space-x-2">
-            <Layers className="w-5 h-5 text-blue-400" />
-            <span>Connected Facebook Business Pages ({pages.length})</span>
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Monitor and automate sales follow-up across all of your business storefronts simultaneously.
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center space-x-2">
+              <Layers className="w-5 h-5 text-blue-500 dark:text-blue-400" />
+              <span>Connected Facebook Business Pages ({pages.length})</span>
+            </h2>
+            {activeBusiness && activeBusiness !== "ALL" && (
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/30">
+                {activeBusiness}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            {activeBusiness && activeBusiness !== "ALL"
+              ? `Connected Facebook storefronts managed under ${activeBusiness}.`
+              : "Monitor and automate sales follow-up across all of your connected business storefronts."}
           </p>
         </div>
 
         <button
-          onClick={() => setShowAddModal(true)}
-          className="inline-flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow-md shadow-blue-600/30"
+          onClick={() => {
+            if (activeBusiness && activeBusiness !== "ALL") {
+              setNewBusinessName(activeBusiness);
+            }
+            setShowAddModal(true);
+          }}
+          className="inline-flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow-md shadow-blue-600/30 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Connect New Page</span>
@@ -179,35 +207,76 @@ export function PagesManagerTab({
       </div>
 
       {/* Pages Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {pages.map((page) => (
-          <div
-            key={page.pageId}
-            className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition relative overflow-hidden"
+      {pages.length === 0 ? (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center shadow-xs">
+          <Layers className="w-10 h-10 text-slate-400 dark:text-slate-600 mx-auto mb-3" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+            No Pages Connected to {activeBusiness !== "ALL" ? activeBusiness : "this Portfolio"}
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
+            Connect a Facebook Page to start monitoring incoming leads and automated follow-ups.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeBusiness && activeBusiness !== "ALL") {
+                setNewBusinessName(activeBusiness);
+              }
+              setShowAddModal(true);
+            }}
+            className="mt-4 inline-flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow-md shadow-blue-600/30 cursor-pointer"
           >
-            <div>
-              {/* Header: Avatar, Name & Status */}
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center space-x-3">
-                  <img
-                    src={
-                      page.avatarUrl ||
-                      "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=150&auto=format&fit=crop&q=80"
-                    }
-                    alt={page.name}
-                    className="w-12 h-12 rounded-xl object-cover ring-1 ring-slate-700 shadow-md"
-                  />
-                  <div>
-                    <h3 className="text-sm font-bold text-white leading-tight">{page.name}</h3>
-                    <span className="text-[10px] text-slate-400">{page.category}</span>
+            <Plus className="w-4 h-4" />
+            <span>Connect Page</span>
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {pages.map((page) => {
+          const matchedPortfolio = portfolios.find((p) => p.name === page.businessName);
+          const businessLabel = page.businessName || "SieLab Retail Group";
+          const businessIcon = matchedPortfolio?.icon || (businessLabel.includes("Moew") ? "☕" : "🏢");
+          const isMoew = businessLabel.includes("Moew") || page.pageId === "fb_page_05";
+
+          return (
+            <div
+              key={page.pageId}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-blue-400 dark:hover:border-slate-700 transition relative overflow-hidden shadow-xs dark:shadow-sm"
+            >
+              <div>
+                {/* Header: Avatar, Name & Status */}
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center space-x-3">
+                    <img
+                      src={
+                        page.avatarUrl ||
+                        "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=150&auto=format&fit=crop&q=80"
+                      }
+                      alt={page.name}
+                      className="w-12 h-12 rounded-xl object-cover ring-1 ring-slate-200 dark:ring-slate-700 shadow-sm"
+                    />
+                    <div>
+                      <div className="flex items-center space-x-1.5 mb-1">
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded font-semibold border ${
+                            isMoew
+                              ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800/60"
+                              : "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800/60"
+                          }`}
+                        >
+                          {businessIcon} {businessLabel}
+                        </span>
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-tight">{page.name}</h3>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">{page.category}</span>
+                    </div>
                   </div>
-                </div>
 
                 <span
                   className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                     page.isActive
-                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                      : "bg-slate-800 text-slate-500 border-slate-700"
+                      ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30"
+                      : "bg-slate-100 text-slate-500 border-slate-300 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-700"
                   }`}
                 >
                   {page.isActive ? "Active" : "Paused"}
@@ -279,25 +348,27 @@ export function PagesManagerTab({
               </button>
             </div>
           </div>
-        ))}
+        );
+      })}
       </div>
+      )}
 
       {/* Add Page Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
                   <span>Connect Facebook Page</span>
                 </h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                   Enter your Page ID and Token to automatically fetch your page profile.
                 </p>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-slate-400 hover:text-white text-xs"
+                className="text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white text-xs"
               >
                 ✕
               </button>
@@ -305,7 +376,7 @@ export function PagesManagerTab({
 
             <form onSubmit={handleAddSubmit} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Facebook Page ID</label>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Facebook Page ID</label>
                 <input
                   type="text"
                   required
@@ -316,12 +387,12 @@ export function PagesManagerTab({
                     setFetchedProfile(null);
                     setFetchError(null);
                   }}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono text-xs"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-mono text-xs transition"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Page Access Token</label>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Page Access Token</label>
                 <input
                   type="password"
                   placeholder={isMockMode ? "Leave blank for auto sandbox token" : "EAAB..."}
@@ -331,7 +402,7 @@ export function PagesManagerTab({
                     setFetchedProfile(null);
                     setFetchError(null);
                   }}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono text-xs"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-mono text-xs transition"
                 />
               </div>
 
@@ -342,13 +413,22 @@ export function PagesManagerTab({
                     type="button"
                     onClick={handleFetchProfile}
                     disabled={isFetchingProfile}
-                    className="w-full py-2 px-3 rounded-xl bg-blue-600/15 hover:bg-blue-600/25 text-blue-400 border border-blue-500/30 flex items-center justify-center space-x-2 font-semibold transition text-xs disabled:opacity-50"
+                    className="w-full py-2 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/15 dark:hover:bg-blue-600/25 dark:text-blue-400 dark:border-blue-500/30 flex items-center justify-center space-x-2 font-semibold transition text-xs disabled:opacity-50"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isFetchingProfile ? "animate-spin" : ""}`} />
-                    <span>{isFetchingProfile ? "Fetching Meta Profile..." : "Fetch Profile from Facebook"}</span>
+                    {isFetchingProfile ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Connecting & Fetching Meta Profile...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Fetch & Verify Page Profile from Meta</span>
+                      </>
+                    )}
                   </button>
                   {fetchError && (
-                    <div className="flex items-center space-x-1.5 text-rose-400 mt-1.5 text-[11px]">
+                    <div className="mt-1.5 text-[11px] text-red-600 dark:text-red-400 flex items-center space-x-1">
                       <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                       <span>{fetchError}</span>
                     </div>
@@ -356,14 +436,14 @@ export function PagesManagerTab({
                 </div>
               )}
 
-              {/* Live Profile Preview Card */}
+              {/* Profile Preview Card when Fetched */}
               {fetchedProfile && (
-                <div className="bg-slate-950 border border-emerald-500/40 rounded-xl p-3 flex items-center space-x-3 shadow-inner">
+                <div className="bg-emerald-50/70 dark:bg-slate-950 border border-emerald-300 dark:border-emerald-500/40 rounded-xl p-3 flex items-center space-x-3 shadow-xs">
                   {fetchedProfile.avatarUrl ? (
                     <img
                       src={fetchedProfile.avatarUrl}
                       alt={fetchedProfile.name}
-                      className="w-12 h-12 rounded-xl object-cover ring-2 ring-emerald-500/50 shadow-md shrink-0"
+                      className="w-12 h-12 rounded-xl object-cover ring-2 ring-emerald-500/50 shadow-sm shrink-0"
                     />
                   ) : (
                     <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-white text-lg shrink-0">
@@ -372,20 +452,20 @@ export function PagesManagerTab({
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center space-x-1.5">
-                      <h4 className="text-sm font-bold text-white truncate">{fetchedProfile.name}</h4>
-                      <span className="text-[10px] bg-emerald-500/20 text-emerald-400 font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 shrink-0">
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate">{fetchedProfile.name}</h4>
+                      <span className="text-[10px] bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-bold px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30 shrink-0">
                         Meta Verified ✓
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400 truncate">{fetchedProfile.category || "Business Page"}</p>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">{fetchedProfile.category || "Business Page"}</p>
                     <p className="text-[10px] text-slate-500 font-mono mt-0.5">ID: {fetchedProfile.id}</p>
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">
-                  Page Name {fetchedProfile && <span className="text-emerald-400 font-normal">(Auto-fetched)</span>}
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                  Page Name {fetchedProfile && <span className="text-emerald-600 dark:text-emerald-400 font-normal">(Auto-fetched)</span>}
                 </label>
                 <input
                   type="text"
@@ -393,28 +473,55 @@ export function PagesManagerTab({
                   placeholder="e.g. SieLab Outdoor & Camping"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500 text-xs"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 text-xs transition"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">
-                  Category {fetchedProfile && <span className="text-emerald-400 font-normal">(Auto-fetched)</span>}
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                  Category {fetchedProfile && <span className="text-emerald-600 dark:text-emerald-400 font-normal">(Auto-fetched)</span>}
                 </label>
                 <input
                   type="text"
                   placeholder="e.g. Sporting Goods / Retail"
                   value={newCategory}
                   onChange={(e) => setNewCategory(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500 text-xs"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 text-xs transition"
                 />
               </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-800">
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                  Assign to Business Portfolio
+                </label>
+                <select
+                  value={newBusinessName}
+                  onChange={(e) => setNewBusinessName(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 text-xs transition"
+                >
+                  {portfolios && portfolios.length > 0 ? (
+                    portfolios.map((p) => (
+                      <option key={p.id} value={p.name} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+                        {p.icon || "🏢"} {p.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="SieLab Retail Group" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">🏢 SieLab Retail Group</option>
+                      <option value="Moew Hospitality" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">☕ Moew Hospitality</option>
+                    </>
+                  )}
+                </select>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                  Ensures all leads, campaigns, and metrics for this page are isolated to this business portfolio.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-3 py-1.5 rounded-xl text-slate-400 hover:text-white"
+                  className="px-3 py-1.5 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white font-medium"
                 >
                   Cancel
                 </button>

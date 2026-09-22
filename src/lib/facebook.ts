@@ -22,7 +22,26 @@ export interface SendMessageResult {
 }
 
 /**
- * Replace placeholders in follow-up message templates
+ * Resolves spintax strings in the format {option1|option2|option3}.
+ * Recursively resolves nested spintax like {Hello|Hi {there|friend}}!
+ */
+export function parseSpintax(text: string): string {
+  if (!text) return "";
+  const spintaxRegex = /\{([^{}]+)\}/;
+  let matches;
+  let resolved = text;
+  let iterations = 0;
+  while ((matches = spintaxRegex.exec(resolved)) !== null && iterations < 50) {
+    const options = matches[1].split("|");
+    const choice = options[Math.floor(Math.random() * options.length)];
+    resolved = resolved.replace(matches[0], choice);
+    iterations++;
+  }
+  return resolved;
+}
+
+/**
+ * Replace placeholders in follow-up message templates and resolves Spintax variations
  */
 export function renderMessageTemplate(
   template: string,
@@ -30,15 +49,22 @@ export function renderMessageTemplate(
     customerName: string;
     pageName: string;
     adSource?: string | null;
-  }
+  },
+  options?: { resolveSpintax?: boolean }
 ): string {
   const firstName = variables.customerName.split(" ")[0] || variables.customerName;
 
-  return template
+  let text = template
     .replace(/\{\{\s*customer_name\s*\}\}/gi, variables.customerName)
     .replace(/\{\{\s*first_name\s*\}\}/gi, firstName)
     .replace(/\{\{\s*page_name\s*\}\}/gi, variables.pageName)
     .replace(/\{\{\s*ad_source\s*\}\}/gi, variables.adSource || "our featured offer");
+
+  if (options?.resolveSpintax !== false) {
+    text = parseSpintax(text);
+  }
+
+  return text;
 }
 
 /**

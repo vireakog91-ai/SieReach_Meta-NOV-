@@ -5,6 +5,7 @@ export interface AnalyzedLead {
   pageId: string;
   pageName: string;
   pageAvatar?: string | null;
+  businessName?: string;
   psid: string;
   customerName: string;
   customerAvatar?: string | null;
@@ -264,6 +265,7 @@ export async function scanInactiveLeads(
       pageId: lead.pageId,
       pageName: lead.page.name,
       pageAvatar: lead.page.avatarUrl,
+      businessName: lead.page.businessName || (lead.pageId === "fb_page_05" ? "Moew Hospitality" : "SieLab Retail Group"),
       psid: lead.psid,
       customerName: lead.customerName,
       customerAvatar: lead.customerAvatar,

@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const businessName = searchParams.get("businessName");
+
+    const where: any = {};
+    if (businessName && businessName !== "ALL") {
+      where.businessName = businessName;
+    }
+
     const campaigns = await prisma.followUpCampaign.findMany({
+      where,
       include: {
         page: true,
         _count: {
@@ -27,10 +36,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       name,
+      businessName,
       pageId,
       inactiveHoursThreshold,
       messageTemplate,
       imageUrl,
+      imageUrls,
+      enableImageSpin,
       messageTag,
       autoBlast,
       excludePast24h,
@@ -50,13 +62,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Resolve business name: if pageId is provided and businessName isn't, lookup the page
+    let resolvedBusinessName = businessName;
+    if (!resolvedBusinessName && pageId) {
+      const targetPage = await prisma.facebookPage.findUnique({ where: { pageId } });
+      if (targetPage) resolvedBusinessName = targetPage.businessName;
+    }
+    if (!resolvedBusinessName) {
+      resolvedBusinessName = "SieLab Retail Group";
+    }
+
     const campaign = await prisma.followUpCampaign.create({
       data: {
         name,
+        businessName: resolvedBusinessName,
         ...(pageId ? { page: { connect: { pageId } } } : {}),
         inactiveHoursThreshold: parseFloat(inactiveHoursThreshold ?? "24.0"),
         messageTemplate,
         imageUrl: imageUrl || null,
+        imageUrls: imageUrls ? (typeof imageUrls === "string" ? imageUrls : JSON.stringify(imageUrls)) : null,
+        enableImageSpin: Boolean(enableImageSpin),
         messageTag: messageTag || "HUMAN_AGENT",
         autoBlast: Boolean(autoBlast),
         excludePast24h: excludePast24h !== undefined ? Boolean(excludePast24h) : true,
@@ -86,10 +111,13 @@ export async function PUT(req: NextRequest) {
     const {
       id,
       name,
+      businessName,
       pageId,
       inactiveHoursThreshold,
       messageTemplate,
       imageUrl,
+      imageUrls,
+      enableImageSpin,
       messageTag,
       autoBlast,
       excludePast24h,
@@ -114,6 +142,7 @@ export async function PUT(req: NextRequest) {
       where: { id },
       data: {
         ...(name !== undefined ? { name } : {}),
+        ...(businessName !== undefined ? { businessName } : {}),
         ...(pageId !== undefined
           ? pageId
             ? { page: { connect: { pageId } } }
@@ -124,6 +153,10 @@ export async function PUT(req: NextRequest) {
           : {}),
         ...(messageTemplate !== undefined ? { messageTemplate } : {}),
         ...(imageUrl !== undefined ? { imageUrl: imageUrl || null } : {}),
+        ...(imageUrls !== undefined
+          ? { imageUrls: imageUrls ? (typeof imageUrls === "string" ? imageUrls : JSON.stringify(imageUrls)) : null }
+          : {}),
+        ...(enableImageSpin !== undefined ? { enableImageSpin: Boolean(enableImageSpin) } : {}),
         ...(messageTag !== undefined ? { messageTag } : {}),
         ...(autoBlast !== undefined ? { autoBlast: Boolean(autoBlast) } : {}),
         ...(excludePast24h !== undefined ? { excludePast24h: Boolean(excludePast24h) } : {}),

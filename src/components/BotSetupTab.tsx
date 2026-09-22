@@ -25,16 +25,21 @@ import {
   Upload,
   Trash2,
   Check,
+  Shuffle,
 } from "lucide-react";
 import { renderMessageTemplate } from "@/lib/facebook";
+import { DeleteConfirmModal } from "./common/DeleteConfirmModal";
 
 interface Campaign {
   id: string;
   name: string;
+  businessName?: string;
   pageId?: string | null;
   inactiveHoursThreshold: number;
   messageTemplate: string;
   imageUrl?: string | null;
+  imageUrls?: string | null;
+  enableImageSpin?: boolean;
   messageTag?: string | null;
   autoBlast: boolean;
   excludePast24h: boolean;
@@ -51,7 +56,9 @@ interface Campaign {
 interface BotSetupTabProps {
   campaigns: Campaign[];
   pages: Array<{ pageId: string; name: string }>;
+  activeBusiness?: string;
   onSaveCampaign: (campaign: Partial<Campaign>) => Promise<any>;
+  onDeleteCampaign?: (campaignId: string) => Promise<any>;
   onExecuteCampaignBlast?: (campaignId: string) => Promise<void>;
   isSaving: boolean;
   isBlasting: boolean;
@@ -60,7 +67,9 @@ interface BotSetupTabProps {
 export function BotSetupTab({
   campaigns,
   pages,
+  activeBusiness,
   onSaveCampaign,
+  onDeleteCampaign,
   onExecuteCampaignBlast,
   isSaving,
   isBlasting,
@@ -112,6 +121,10 @@ export function BotSetupTab({
     activeCampaign.messageTag || "HUMAN_AGENT"
   );
   const [autoBlast, setAutoBlast] = useState<boolean>(activeCampaign.autoBlast || false);
+  const [enableImageSpin, setEnableImageSpin] = useState<boolean>(
+    activeCampaign.enableImageSpin ?? false
+  );
+  const [previewSpinSeed, setPreviewSpinSeed] = useState<number>(0);
   
   // Tag Safety & Drip Rate States
   const [excludePast24h, setExcludePast24h] = useState<boolean>(
@@ -136,6 +149,10 @@ export function BotSetupTab({
   const [confirmInput, setConfirmInput] = useState<string>("");
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Campaign Delete State
+  const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null);
+  const [isDeletingCampaign, setIsDeletingCampaign] = useState<boolean>(false);
 
   // Background Auto-Check State
   const [isRunningAutoCheck, setIsRunningAutoCheck] = useState(false);
@@ -238,12 +255,39 @@ export function BotSetupTab({
     setStep2ImageUrl(c.step2ImageUrl || "");
     setSaveError(null);
 
-    // Populate poster slots with campaign image in Poster 1
-    setPosterSlots({
-      "Poster 1": c.imageUrl || "",
-      "Poster 2": "",
-      "Poster 3": "",
-    });
+    setEnableImageSpin(c.enableImageSpin ?? false);
+
+    // Populate poster slots from multi-image array or fallback
+    if (c.imageUrls) {
+      try {
+        const parsed = typeof c.imageUrls === "string" ? JSON.parse(c.imageUrls) : c.imageUrls;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setPosterSlots({
+            "Poster 1": parsed[0] || "",
+            "Poster 2": parsed[1] || "",
+            "Poster 3": parsed[2] || "",
+          });
+        } else {
+          setPosterSlots({
+            "Poster 1": c.imageUrl || "",
+            "Poster 2": "",
+            "Poster 3": "",
+          });
+        }
+      } catch (e) {
+        setPosterSlots({
+          "Poster 1": c.imageUrl || "",
+          "Poster 2": "",
+          "Poster 3": "",
+        });
+      }
+    } else {
+      setPosterSlots({
+        "Poster 1": c.imageUrl || "",
+        "Poster 2": "",
+        "Poster 3": "",
+      });
+    }
     setSelectedPoster("Poster 1");
 
     // Establish saved baseline snapshot to track dirty unsaved edits
@@ -253,6 +297,7 @@ export function BotSetupTab({
       thresholdHours: c.inactiveHoursThreshold,
       messageTemplate: c.messageTemplate,
       imageUrl: c.imageUrl || "",
+      enableImageSpin: c.enableImageSpin ?? false,
       messageTag: c.messageTag || "HUMAN_AGENT",
       autoBlast: c.autoBlast,
       excludePast24h: c.excludePast24h ?? true,
@@ -264,6 +309,54 @@ export function BotSetupTab({
       step2MessageTemplate: c.step2MessageTemplate || "",
       step2ImageUrl: c.step2ImageUrl || "",
     });
+  };
+
+  const handleNewRule = () => {
+    setSelectedId("new");
+    setName("New Custom Follow-Up Rule");
+    setPageId("");
+    setThresholdHours(24.0);
+    setMessageTemplate(
+      "Hello {{customer_name}}! We noticed you inquired about {{ad_source}}. Would you like assistance placing your order?"
+    );
+    setImageUrl("");
+    setPosterSlots({ "Poster 1": "", "Poster 2": "", "Poster 3": "" });
+    setSelectedPoster("Poster 1");
+    setMessageTag("HUMAN_AGENT");
+    setAutoBlast(false);
+    setEnableImageSpin(false);
+    setExcludePast24h(true);
+    setDripPreset(3, 5);
+    setMaxFollowUps(1);
+    setCooldownHours(3.0);
+    setStep2CampaignId("");
+    setStep2MessageTemplate(
+      "Hi {{first_name}}, this is our final follow-up from {{page_name}} regarding {{ad_source}}! Let us know if you have any questions or would like to claim your offer."
+    );
+    setStep2ImageUrl("");
+    setSavedBaseline(null);
+    setSaveError(null);
+  };
+
+  const handleConfirmDeleteRule = async () => {
+    if (!campaignToDelete || !onDeleteCampaign) return;
+    setIsDeletingCampaign(true);
+    try {
+      await onDeleteCampaign(campaignToDelete.id);
+      const remaining = campaigns.filter((c) => c.id !== campaignToDelete.id);
+      if (selectedId === campaignToDelete.id) {
+        if (remaining.length > 0) {
+          handleSelectCampaign(remaining[0]);
+        } else {
+          handleNewRule();
+        }
+      }
+      setCampaignToDelete(null);
+    } catch (err: any) {
+      alert(err.message || "Failed to delete rule");
+    } finally {
+      setIsDeletingCampaign(false);
+    }
   };
 
 
@@ -414,13 +507,25 @@ export function BotSetupTab({
   const handleSave = async () => {
     setSaveError(null);
     try {
+      const currentCampaign = campaigns.find((c) => c.id === selectedId);
+      const targetBusinessName =
+        currentCampaign?.businessName ||
+        (activeBusiness && activeBusiness !== "ALL" ? activeBusiness : undefined);
+
+      const postUrls = (["Poster 1", "Poster 2", "Poster 3"] as const)
+        .map((s) => posterSlots[s])
+        .filter((u) => Boolean(u && u.trim()));
+
       const saved = await onSaveCampaign({
         id: selectedId === "new" ? undefined : selectedId,
         name,
+        businessName: targetBusinessName,
         pageId: pageId || null,
         inactiveHoursThreshold: thresholdHours,
         messageTemplate,
-        imageUrl: imageUrl || null,
+        imageUrl: postUrls[0] || imageUrl || null,
+        imageUrls: postUrls.length > 0 ? JSON.stringify(postUrls) : null,
+        enableImageSpin: Boolean(enableImageSpin && postUrls.length > 1),
         messageTag,
         autoBlast,
         excludePast24h,
@@ -443,7 +548,8 @@ export function BotSetupTab({
         pageId: pageId || "",
         thresholdHours,
         messageTemplate,
-        imageUrl: imageUrl || "",
+        imageUrl: postUrls[0] || imageUrl || "",
+        enableImageSpin: Boolean(enableImageSpin && postUrls.length > 1),
         messageTag,
         autoBlast,
         excludePast24h,
@@ -463,67 +569,95 @@ export function BotSetupTab({
     }
   };
 
-  // Preview rendered message
+  // Preview rendered message with live Spintax and Multi-Poster resolution
   const previewCustomerName = "Sophea Meng";
   const previewPageName =
     pages.find((p) => p.pageId === pageId)?.name || "SieLab Fashion & Streetwear";
   const previewAdSource = "Oversized Vintage Hoodie (40% OFF)";
 
-  const previewRenderedText = renderMessageTemplate(messageTemplate, {
-    customerName: previewCustomerName,
-    pageName: previewPageName,
-    adSource: previewAdSource,
-  });
+  const filledPosters = React.useMemo(() => {
+    return (["Poster 1", "Poster 2", "Poster 3"] as const)
+      .map((slot) => posterSlots[slot])
+      .filter((url) => Boolean(url && url.trim()));
+  }, [posterSlots]);
+
+  const activePreviewImage = React.useMemo(() => {
+    if (enableImageSpin && filledPosters.length > 1) {
+      return filledPosters[previewSpinSeed % filledPosters.length];
+    }
+    return posterSlots[selectedPoster] || imageUrl || null;
+  }, [enableImageSpin, filledPosters, previewSpinSeed, posterSlots, selectedPoster, imageUrl]);
+
+  const previewRenderedText = React.useMemo(() => {
+    return renderMessageTemplate(messageTemplate, {
+      customerName: previewCustomerName,
+      pageName: previewPageName,
+      adSource: previewAdSource,
+    });
+  }, [messageTemplate, previewCustomerName, previewPageName, previewAdSource, previewSpinSeed]);
 
   return (
     <div className="space-y-6">
       {/* Existing Rules / Quick Selectors */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-white">Follow-up Bot & Blast Rules</h2>
-          <p className="text-xs text-slate-400">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Follow-up Bot & Blast Rules</h2>
+            {activeBusiness && activeBusiness !== "ALL" && (
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/30">
+                {activeBusiness}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Configure how many hours of customer inactivity triggers the follow-up blast message, image, and safety throttles.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {campaigns.map((c) => (
-            <button
+            <div
               key={c.id}
-              type="button"
-              onClick={() => handleSelectCampaign(c)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
+              className={`group inline-flex items-center rounded-lg text-xs font-semibold transition border pl-3 pr-1.5 py-1 ${
                 selectedId === c.id
                   ? "bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-600/30"
-                  : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+                  : "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-700"
               }`}
             >
-              {c.name} ({c.inactiveHoursThreshold}h)
-            </button>
+              <button
+                type="button"
+                onClick={() => handleSelectCampaign(c)}
+                className="cursor-pointer text-left mr-1.5 focus:outline-none"
+              >
+                {c.name} ({c.inactiveHoursThreshold}h)
+              </button>
+              {onDeleteCampaign && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCampaignToDelete(c);
+                  }}
+                  className={`p-1 rounded-md transition cursor-pointer ${
+                    selectedId === c.id
+                      ? "text-blue-200 hover:text-white hover:bg-blue-700/70"
+                      : "text-slate-400 hover:text-rose-600 hover:bg-slate-200 dark:text-slate-500 dark:hover:text-rose-400 dark:hover:bg-slate-700"
+                  }`}
+                  title={`Delete rule "${c.name}"`}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           ))}
 
           <button
             type="button"
-            onClick={() => {
-              setSelectedId("new");
-              setName("New Custom Follow-Up Rule");
-              setPageId("");
-              setThresholdHours(24.0);
-              setMessageTemplate(
-                "Hello {{customer_name}}! We noticed you inquired about {{ad_source}}. Would you like assistance placing your order?"
-              );
-              setImageUrl("");
-              setPosterSlots({ "Poster 1": "", "Poster 2": "", "Poster 3": "" });
-              setSelectedPoster("Poster 1");
-              setMessageTag("HUMAN_AGENT");
-              setAutoBlast(false);
-              setExcludePast24h(true);
-              setDripPreset(3, 5);
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
+            onClick={handleNewRule}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border cursor-pointer ${
               selectedId === "new"
                 ? "bg-indigo-600 text-white border-indigo-500 shadow-md"
-                : "bg-slate-800 text-slate-400 border-dashed border-slate-700 hover:text-white"
+                : "bg-slate-100 text-slate-600 border-dashed border-slate-300 hover:text-slate-900 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 dark:hover:text-white"
             }`}
           >
             + New Rule
@@ -531,38 +665,54 @@ export function BotSetupTab({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Form Configuration (Left 7 Cols) */}
-        <div className="lg:col-span-7 space-y-5 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm">
+        <div className="lg:col-span-7 space-y-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
           {/* Rule Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-              Rule / Campaign Name
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                Rule / Campaign Name
+              </label>
+              {selectedId !== "new" && onDeleteCampaign && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const curr = campaigns.find((c) => c.id === selectedId);
+                    if (curr) setCampaignToDelete(curr);
+                  }}
+                  className="text-xs text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 flex items-center space-x-1 font-semibold transition cursor-pointer"
+                  title="Delete this rule"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete This Rule</span>
+                </button>
+              )}
+            </div>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. 24h Non-Responsive Customer Recovery Blast"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition"
             />
           </div>
 
           {/* Trigger Threshold (Hours) */}
-          <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-3">
+          <div className="bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-200 flex items-center space-x-2">
-                <Clock className="w-4 h-4 text-amber-400" />
+              <label className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center space-x-2">
+                <Clock className="w-4 h-4 text-amber-500 dark:text-amber-400" />
                 <span>Inactivity Trigger Setup (Hours without response)</span>
               </label>
-              <span className="text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md">
+              <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 px-2 py-0.5 rounded-md">
                 {thresholdHours} Hours Inactivity
               </span>
             </div>
 
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               The bot will detect any customer who hasn&apos;t replied for at least{" "}
-              <strong className="text-white">{thresholdHours} hours</strong> after the sales rep&apos;s initial message.
+              <strong className="text-slate-900 dark:text-white">{thresholdHours} hours</strong> after the sales rep&apos;s initial message.
             </p>
 
             {/* Hours Slider & Direct Input */}
@@ -576,7 +726,7 @@ export function BotSetupTab({
                 onChange={(e) => setThresholdHours(parseFloat(e.target.value))}
                 className="flex-1 accent-blue-500 cursor-pointer"
               />
-              <div className="flex items-center space-x-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1">
+              <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1">
                 <input
                   type="number"
                   min="0.5"
@@ -584,9 +734,9 @@ export function BotSetupTab({
                   step="0.5"
                   value={thresholdHours}
                   onChange={(e) => setThresholdHours(parseFloat(e.target.value) || 1)}
-                  className="w-12 bg-transparent text-xs text-white text-right outline-none font-bold"
+                  className="w-12 bg-transparent text-xs text-slate-900 dark:text-white text-right outline-none font-bold"
                 />
-                <span className="text-xs text-slate-400">h</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">h</span>
               </div>
             </div>
 
@@ -600,8 +750,8 @@ export function BotSetupTab({
                   onClick={() => setThresholdHours(hrs)}
                   className={`text-[11px] px-2 py-0.5 rounded border transition ${
                     thresholdHours === hrs
-                      ? "bg-blue-600/30 border-blue-500 text-blue-300 font-bold"
-                      : "bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200"
+                      ? "bg-blue-50 text-blue-700 border-blue-300 font-bold dark:bg-blue-600/30 dark:border-blue-500 dark:text-blue-300"
+                      : "bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                   }`}
                 >
                   {hrs}h {hrs === 24 ? "(Recommended)" : ""}
@@ -614,8 +764,8 @@ export function BotSetupTab({
           <div
             className={`border rounded-xl p-4 transition ${
               excludePast24h
-                ? "bg-emerald-950/20 border-emerald-500/40"
-                : "bg-red-950/20 border-red-500/40"
+                ? "bg-emerald-50/80 border-emerald-300 dark:bg-emerald-950/20 dark:border-emerald-500/40"
+                : "bg-red-50/80 border-red-300 dark:bg-red-950/20 dark:border-red-500/40"
             }`}
           >
             <div className="flex items-start justify-between gap-3">
@@ -623,8 +773,8 @@ export function BotSetupTab({
                 <div
                   className={`p-2 rounded-lg mt-0.5 ${
                     excludePast24h
-                      ? "bg-emerald-500/20 text-emerald-400"
-                      : "bg-red-500/20 text-red-400"
+                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400"
+                      : "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400"
                   }`}
                 >
                   {excludePast24h ? (
@@ -635,20 +785,20 @@ export function BotSetupTab({
                 </div>
                 <div>
                   <div className="flex items-center space-x-2">
-                    <span className="text-xs font-bold text-white">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white">
                       Tag Safety Guard: Exclude Leads Past 24h
                     </span>
                     <span
                       className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
                         excludePast24h
-                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                          : "bg-red-500/10 text-red-400 border-red-500/30"
+                          ? "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30"
+                          : "bg-red-100 text-red-700 border-red-300 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30"
                       }`}
                     >
                       {excludePast24h ? "ACTIVE (Recommended)" : "UNPROTECTED (High Risk)"}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
                     {excludePast24h ? (
                       <>
                         <strong>Protection Active:</strong> Automatically protects your pages by{" "}
@@ -670,7 +820,7 @@ export function BotSetupTab({
                 className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ${
                   excludePast24h
                     ? "bg-emerald-600"
-                    : "bg-slate-700 border border-slate-600"
+                    : "bg-slate-300 dark:bg-slate-700 border border-slate-400 dark:border-slate-600"
                 }`}
                 title={excludePast24h ? "Click to disable (requires CONFIRM_OFF)" : "Click to re-enable safety guard"}
               >
@@ -684,34 +834,34 @@ export function BotSetupTab({
           </div>
 
           {/* NEW: DRIP RATE PACING SETUP */}
-          <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-3">
+          <div className="bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-200 flex items-center space-x-2">
-                <Timer className="w-4 h-4 text-blue-400" />
+              <label className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center space-x-2">
+                <Timer className="w-4 h-4 text-blue-500 dark:text-blue-400" />
                 <span>Drip Rate Throttling (Anti-Velocity Engine)</span>
               </label>
-              <span className="text-xs font-bold text-blue-400 bg-blue-500/10 border border-blue-500/30 px-2 py-0.5 rounded-md font-mono">
+              <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 px-2 py-0.5 rounded-md font-mono">
                 {dripMin}s – {dripMax}s Random Pacing
               </span>
             </div>
 
-            <p className="text-xs text-slate-400 leading-relaxed">
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
               To prevent Meta algorithmic spam and velocity alerts (Error #368), the bot introduces randomized delay between each message:
             </p>
 
             {/* Input and Quick presets */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
               <div className="flex items-center space-x-2">
-                <span className="text-xs text-slate-300 font-medium">Interval Range:</span>
-                <div className="flex items-center space-x-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1">
+                <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">Interval Range:</span>
+                <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1">
                   <input
                     type="text"
                     value={dripRangeStr}
                     onChange={(e) => handleDripRangeChange(e.target.value)}
                     placeholder="3-5"
-                    className="w-16 bg-transparent text-xs text-white text-center outline-none font-bold font-mono"
+                    className="w-16 bg-transparent text-xs text-slate-900 dark:text-white text-center outline-none font-bold font-mono"
                   />
-                  <span className="text-xs text-slate-400">sec</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">sec</span>
                 </div>
               </div>
 
@@ -729,8 +879,8 @@ export function BotSetupTab({
                     onClick={() => setDripPreset(p.min, p.max)}
                     className={`text-[11px] px-2.5 py-1 rounded-lg border transition ${
                       dripMin === p.min && dripMax === p.max
-                        ? "bg-blue-600/30 border-blue-500 text-blue-300 font-bold"
-                        : "bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200"
+                        ? "bg-blue-50 text-blue-700 border-blue-300 font-bold dark:bg-blue-600/30 dark:border-blue-500 dark:text-blue-300"
+                        : "bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                     }`}
                   >
                     {p.label}
@@ -740,31 +890,31 @@ export function BotSetupTab({
             </div>
 
             <div className="flex items-center space-x-2 text-[11px] text-slate-500">
-              <Info className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <Info className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400 shrink-0" />
               <span>Enforces minimum 3-5 seconds to safeguard your Facebook Pages.</span>
             </div>
           </div>
 
           {/* MULTI-STEP FOLLOW-UP SEQUENCE & COOLDOWN */}
-          <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-4">
+          <div className="bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-4">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-200 flex items-center space-x-2">
-                <RefreshCw className="w-4 h-4 text-purple-400" />
+              <label className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center space-x-2">
+                <RefreshCw className="w-4 h-4 text-purple-500 dark:text-purple-400" />
                 <span>Multi-Step Follow-Up Sequence & Anti-Spam Cooldown</span>
               </label>
-              <span className="text-xs font-bold text-purple-400 bg-purple-500/10 border border-purple-500/30 px-2 py-0.5 rounded-md font-mono">
+              <span className="text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/30 px-2 py-0.5 rounded-md font-mono">
                 {maxFollowUps === 1 ? "Single Follow-Up (Default)" : `2-Step Follow-Up • ${cooldownHours}h Cooldown`}
               </span>
             </div>
 
-            <p className="text-xs text-slate-400 leading-relaxed">
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
               Configure whether to send a single follow-up or allow a second follow-up attempt if the customer remains unresponsive after the first message:
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
               {/* Max Follow-ups Selector */}
               <div className="space-y-1.5">
-                <span className="text-xs text-slate-300 font-medium">Follow-Up Attempts:</span>
+                <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">Follow-Up Attempts:</span>
                 <div className="flex items-center space-x-2">
                   {[
                     { count: 1, label: "1 Follow-Up (Default)" },
@@ -776,8 +926,8 @@ export function BotSetupTab({
                       onClick={() => setMaxFollowUps(item.count)}
                       className={`text-xs px-3.5 py-1.5 rounded-lg border font-semibold transition ${
                         maxFollowUps === item.count
-                          ? "bg-purple-600/30 border-purple-500 text-purple-300 font-bold"
-                          : "bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200"
+                          ? "bg-purple-50 text-purple-700 border-purple-300 font-bold dark:bg-purple-600/30 dark:border-purple-500 dark:text-purple-300"
+                          : "bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                       }`}
                     >
                       {item.label}
@@ -789,7 +939,7 @@ export function BotSetupTab({
               {/* Cooldown Hours (when 2 follow-ups selected) */}
               {maxFollowUps === 2 && (
                 <div className="space-y-1.5">
-                  <span className="text-xs text-slate-300 font-medium">Cooldown Before Step 2:</span>
+                  <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">Cooldown Before Step 2:</span>
                   <div className="flex items-center space-x-2">
                     {[
                       { label: "3h (Default)", hours: 3.0 },
@@ -802,8 +952,8 @@ export function BotSetupTab({
                         onClick={() => setCooldownHours(preset.hours)}
                         className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition ${
                           cooldownHours === preset.hours
-                            ? "bg-purple-600/30 border-purple-500 text-purple-300 font-bold"
-                            : "bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200"
+                            ? "bg-purple-50 text-purple-700 border-purple-300 font-bold dark:bg-purple-600/30 dark:border-purple-500 dark:text-purple-300"
+                            : "bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                         }`}
                       >
                         {preset.label}
@@ -865,7 +1015,7 @@ export function BotSetupTab({
                             key={tag}
                             type="button"
                             onClick={() => handleInsertStep2Tag(tag)}
-                            className="bg-slate-800 hover:bg-slate-700 text-purple-400 border border-slate-700 text-[10px] px-2 py-0.5 rounded-md font-mono transition"
+                            className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-purple-400 dark:border-slate-700 text-[10px] px-2 py-0.5 rounded-md font-mono transition"
                           >
                             +{`{{${tag}}}`}
                           </button>
@@ -876,12 +1026,12 @@ export function BotSetupTab({
                         value={step2MessageTemplate}
                         onChange={(e) => setStep2MessageTemplate(e.target.value)}
                         placeholder="Enter the distinct message for Follow-Up #2 (e.g. final reminder, last chance voucher)..."
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-purple-500 transition"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                      <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
                         Step 2 Optional Attached Image URL
                       </label>
                       <input
@@ -889,19 +1039,19 @@ export function BotSetupTab({
                         value={step2ImageUrl}
                         onChange={(e) => setStep2ImageUrl(e.target.value)}
                         placeholder="https://images.unsplash.com/... (optional)"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-purple-500 transition"
                       />
                     </div>
                   </div>
                 )}
 
                 {/* STRICT 24H POLICY CALLOUT */}
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-300 space-y-1">
-                  <div className="flex items-center space-x-1.5 font-bold text-amber-200">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl p-3 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                  <div className="flex items-center space-x-1.5 font-bold text-amber-900 dark:text-amber-200">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                     <span>Strict Meta 24-Hour Policy Window Enforcement</span>
                   </div>
-                  <p className="text-[11px] text-amber-300/90 leading-relaxed">
+                  <p className="text-[11px] text-amber-800/90 dark:text-amber-300/90 leading-relaxed">
                     The {cooldownHours}h cooldown does <strong>not bypass nor overtake</strong> Meta&apos;s 24-hour messaging policy window.
                     For example, if a customer receives Follow-Up #1 at <strong>21 hours</strong> and cooldown is <strong>3 hours</strong>, 
                     then <strong>21h + 3h = 24h</strong> (standard window closed). 
@@ -914,47 +1064,107 @@ export function BotSetupTab({
 
           {/* Target Facebook Page Selector */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
               Target Facebook Page
             </label>
             <select
               value={pageId}
               onChange={(e) => setPageId(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 transition"
             >
-              <option value="">Apply to All Connected Pages (Multi-Page Rule)</option>
-              {pages.map((p) => (
-                <option key={p.pageId} value={p.pageId}>
-                  {p.name}
-                </option>
-              ))}
+              <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold">
+                {activeBusiness && activeBusiness !== "ALL"
+                  ? `Apply to All Pages in ${activeBusiness} (${pages.length} ${pages.length === 1 ? "Page" : "Pages"})`
+                  : `Apply to All Connected Pages across All Portfolios (${pages.length} Pages)`}
+              </option>
+              {activeBusiness && activeBusiness !== "ALL" ? (
+                pages.map((p) => (
+                  <option key={p.pageId} value={p.pageId} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+                    📄 {p.name}
+                  </option>
+                ))
+              ) : (
+                Array.from(
+                  new Set(
+                    pages.map(
+                      (p) =>
+                        (p as any).businessName ||
+                        (p.pageId === "fb_page_05" ? "Moew Hospitality" : "SieLab Retail Group")
+                    )
+                  )
+                ).map((bName) => {
+                  const groupPages = pages.filter(
+                    (p) =>
+                      ((p as any).businessName ||
+                        (p.pageId === "fb_page_05" ? "Moew Hospitality" : "SieLab Retail Group")) === bName
+                  );
+                  return (
+                    <optgroup
+                      key={bName}
+                      label={`${bName.includes("Moew") ? "☕" : "🏢"} ${bName} (${groupPages.length} ${
+                        groupPages.length > 1 ? "Pages" : "Page"
+                      })`}
+                      className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold"
+                    >
+                      {groupPages.map((p) => (
+                        <option key={p.pageId} value={p.pageId} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-normal">
+                          {p.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })
+              )}
             </select>
           </div>
 
           {/* Message Template */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                 Follow-Up Message Template
               </label>
-              <span className="text-[11px] text-slate-400">Click to insert variables:</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">Click to insert variables:</span>
             </div>
 
-            {/* Variable Pills */}
-            <div className="flex flex-wrap gap-1.5 mb-2">
+            {/* Variable & Spintax Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 mb-2">
+              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 mr-1">Variables:</span>
               {[
                 { tag: "customer_name", desc: "Full Name" },
                 { tag: "first_name", desc: "First Name" },
                 { tag: "page_name", desc: "Business Page" },
                 { tag: "ad_source", desc: "Ad Product" },
-              ].map(({ tag, desc }) => (
+              ].map(({ tag }) => (
                 <button
                   key={tag}
                   type="button"
                   onClick={() => handleInsertTag(tag)}
-                  className="bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700 text-[11px] px-2.5 py-1 rounded-lg font-mono transition"
+                  className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-blue-400 dark:border-slate-700 text-[11px] px-2.5 py-1 rounded-lg font-mono transition shadow-2xs cursor-pointer"
                 >
                   +{`{{${tag}}}`}
+                </button>
+              ))}
+
+              <span className="text-[10px] uppercase font-bold text-purple-600 dark:text-purple-400 ml-2 mr-1 flex items-center gap-1">
+                <Shuffle className="w-3 h-3" />
+                <span>Spintax:</span>
+              </span>
+              {[
+                { label: "{Hi|Hello|Hey}", snippet: "{Hi|Hello|Hey}" },
+                { label: "{We noticed|Just checking in}", snippet: "{We noticed you checked in|Just following up}" },
+                { label: "{15% OFF|Special offer}", snippet: "{an exclusive 15% OFF voucher|a special fast-action offer}" },
+              ].map(({ label, snippet }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => {
+                    setMessageTemplate((prev) => `${prev} ${snippet}`);
+                  }}
+                  className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-950/40 dark:hover:bg-purple-900/60 dark:text-purple-300 dark:border-purple-800/60 text-[11px] px-2.5 py-1 rounded-lg font-mono transition shadow-2xs cursor-pointer"
+                  title={`Insert Spintax: ${snippet}`}
+                >
+                  +{label}
                 </button>
               ))}
             </div>
@@ -964,19 +1174,35 @@ export function BotSetupTab({
               value={messageTemplate}
               onChange={(e) => setMessageTemplate(e.target.value)}
               placeholder="Hi {{customer_name}}, we noticed you inquired about {{ad_source}}..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none font-sans leading-relaxed"
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none font-sans leading-relaxed transition"
             />
+
+            {/* Spintax guidance bar */}
+            <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1.5 gap-2">
+              <span className="flex items-center gap-1">
+                <span>💡 <strong>Spintax:</strong> Use <code>&#123;option 1|option 2|option 3&#125;</code> to randomly alternate phrasing per lead.</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewSpinSeed((s) => s + 1)}
+                className="text-purple-600 dark:text-purple-400 hover:underline font-semibold flex items-center gap-1 cursor-pointer shrink-0"
+                title="Shuffle Spintax variation & poster in preview"
+              >
+                <Shuffle className="w-3 h-3" />
+                <span>Test Spin Preview</span>
+              </button>
+            </div>
           </div>
 
           {/* Image Attachment Setup - Upload Workflow */}
-          <div className="space-y-3 bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+          <div className="space-y-3 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center space-x-1.5">
-                <ImageIcon className="w-4 h-4 text-blue-400" />
+              <label className="text-xs font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center space-x-1.5">
+                <ImageIcon className="w-4 h-4 text-blue-500 dark:text-blue-400" />
                 <span>Blast Image Flyer / Poster Attachment</span>
               </label>
-              <span className="text-[11px] text-slate-400">
-                Active Slot: <strong className="text-blue-400">{selectedPoster}</strong>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                Active Slot: <strong className="text-blue-600 dark:text-blue-400">{selectedPoster}</strong>
               </span>
             </div>
 
@@ -1078,16 +1304,48 @@ export function BotSetupTab({
 
               {/* Status Note */}
               <div className="text-[11px] text-slate-400">
-                {imageUrl ? (
-                  <span className="text-emerald-400 flex items-center space-x-1">
+                {filledPosters.length > 0 ? (
+                  <span className="text-emerald-500 dark:text-emerald-400 flex items-center space-x-1 font-medium">
                     <Check className="w-3.5 h-3.5" />
-                    <span>Ready (saves when clicking Save Bot Rule)</span>
+                    <span>{filledPosters.length} flyer(s) ready (saves when clicking Save Bot Rule)</span>
                   </span>
                 ) : (
                   <span className="text-slate-500">No flyer attached (Text-only message)</span>
                 )}
               </div>
             </div>
+
+            {/* Multi-Poster Spin Rotation Toggle (appears when 2+ posters uploaded) */}
+            {filledPosters.length > 1 && (
+              <div className="p-3.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 flex items-center justify-between gap-3 shadow-2xs animate-in fade-in">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                    <Shuffle className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <span>Enable Poster Spin (Multi-Image Rotation)</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/80 dark:text-purple-300 font-mono font-bold">
+                        {filledPosters.length} Posters Active
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-purple-700 dark:text-purple-300/90 leading-tight mt-0.5">
+                      Randomly alternates across your {filledPosters.length} uploaded posters for each recipient to maximize response rates and avoid ad fatigue.
+                    </p>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={enableImageSpin}
+                    onChange={(e) => setEnableImageSpin(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-750 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Auto-Blast Background Dispatcher Toggle */}
@@ -1101,12 +1359,12 @@ export function BotSetupTab({
                     <span>Active</span>
                   </span>
                 ) : (
-                  <span className="bg-slate-800 text-slate-400 text-[10px] px-2 py-0.5 rounded-full border border-slate-700">
+                  <span className="bg-slate-100 text-slate-600 text-[10px] px-2 py-0.5 rounded-full border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
                     Inactive
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Automatically dispatch follow-up blast when customers reach {thresholdHours}h silence with drip pacing.
               </p>
             </div>
@@ -1114,7 +1372,7 @@ export function BotSetupTab({
               type="button"
               onClick={() => setAutoBlast(!autoBlast)}
               className={`w-11 h-6 rounded-full transition-colors relative ${
-                autoBlast ? "bg-blue-600" : "bg-slate-800 border border-slate-700"
+                autoBlast ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-800 border border-slate-400 dark:border-slate-700"
               }`}
             >
               <div
@@ -1206,7 +1464,7 @@ export function BotSetupTab({
                   title={hasUnsavedChanges ? "Please click \"Save Bot Rule\" first to apply your changes before blasting" : "Dispatch blast follow-up"}
                   className={`flex items-center space-x-1.5 text-xs font-bold px-4 py-2 rounded-xl transition shadow-md disabled:opacity-40 disabled:cursor-not-allowed ${
                     hasUnsavedChanges
-                      ? "bg-slate-800 text-slate-400 border border-slate-700"
+                      ? "bg-slate-200 text-slate-500 border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
                       : blastState === "success"
                       ? "bg-emerald-600 text-white shadow-emerald-600/30"
                       : blastState === "error"
@@ -1245,15 +1503,26 @@ export function BotSetupTab({
           </div>
         </div>
 
-        {/* Live Messenger Mobile Mockup Preview (Right 5 Cols) */}
-        <div className="lg:col-span-5 space-y-3">
-          <div className="flex items-center space-x-2 text-xs font-semibold text-slate-300">
-            <Smartphone className="w-4 h-4 text-blue-400" />
-            <span>Customer Messenger Preview</span>
+        {/* Live Messenger Mobile Mockup Preview (Right 5 Cols - Sticky on Desktop) */}
+        <div className="lg:col-span-5 space-y-3 lg:sticky lg:top-20 z-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+              <Smartphone className="w-4 h-4 text-blue-500 dark:text-blue-400" />
+              <span>Customer Messenger Preview</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPreviewSpinSeed((s) => s + 1)}
+              className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 bg-purple-50 dark:bg-purple-950/50 hover:bg-purple-100 dark:hover:bg-purple-900/40 border border-purple-200 dark:border-purple-800/60 px-2.5 py-1 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+              title="Shuffle Spintax text variation and poster flyer"
+            >
+              <Shuffle className="w-3.5 h-3.5" />
+              <span>Spin Preview</span>
+            </button>
           </div>
 
           {/* Phone Frame */}
-          <div className="bg-slate-50 dark:bg-slate-950 border-4 border-slate-300 dark:border-slate-800 rounded-[2.5rem] p-4 shadow-2xl relative overflow-hidden">
+          <div className="bg-slate-50 dark:bg-slate-950 border-4 border-slate-300 dark:border-slate-800 rounded-[2.5rem] p-4 shadow-2xl relative overflow-hidden max-h-[calc(100vh-7rem)] overflow-y-auto">
             {/* Speaker bar */}
             <div className="w-20 h-3 bg-slate-300 dark:bg-slate-800 rounded-full mx-auto mb-4" />
 
@@ -1297,11 +1566,17 @@ export function BotSetupTab({
               </div>
 
               {/* SieReach Follow-Up Blast: Image */}
-              {imageUrl && (
-                <div className="flex justify-start animate-in fade-in">
+              {activePreviewImage && (
+                <div className="flex flex-col items-start space-y-1 animate-in fade-in">
+                  {enableImageSpin && filledPosters.length > 1 && (
+                    <span className="text-[9px] font-mono text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800/60 px-1.5 py-0.5 rounded-md font-bold flex items-center gap-1">
+                      <Shuffle className="w-2.5 h-2.5" />
+                      <span>Poster Spun ({previewSpinSeed % filledPosters.length + 1} of {filledPosters.length})</span>
+                    </span>
+                  )}
                   <div className="max-w-[85%] rounded-2xl rounded-tl-sm overflow-hidden border border-slate-300 dark:border-slate-700 shadow-md">
                     <img
-                      src={imageUrl}
+                      src={activePreviewImage}
                       alt="Promotional Attachment"
                       className="w-full h-36 object-cover"
                       onError={(e) => {
@@ -1337,44 +1612,44 @@ export function BotSetupTab({
       {/* CONFIRM_OFF WARNING MODAL */}
       {showConfirmModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-slate-900 border border-red-500/40 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center space-x-3 text-red-400">
+          <div className="bg-white dark:bg-slate-900 border border-red-500/40 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center space-x-3 text-red-500 dark:text-red-400">
               <div className="p-2 rounded-xl bg-red-500/10 border border-red-500/30">
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
                   High-Risk Action: Disable 24h Tag Safety
                 </h3>
-                <span className="text-xs text-red-400 font-semibold">
+                <span className="text-xs text-red-600 dark:text-red-400 font-semibold">
                   Meta Facebook Messenger Policy Warning
                 </span>
               </div>
             </div>
 
-            <div className="bg-red-950/30 border border-red-500/20 rounded-xl p-3.5 text-xs text-slate-300 space-y-2 leading-relaxed">
+            <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-500/20 rounded-xl p-3.5 text-xs text-slate-700 dark:text-slate-300 space-y-2 leading-relaxed">
               <p>
-                Meta strictly limits automated messaging outside the 24-hour standard window. Disabling this guard allows the bot to message customers whose last message was more than 24 hours ago using the <code>HUMAN_AGENT</code> tag.
+                Meta strictly limits automated messaging outside the 24-hour standard window. Disabling this guard allows the bot to message customers whose last message was more than 24 hours ago using the <code className="font-mono font-semibold text-red-700 dark:text-red-400">HUMAN_AGENT</code> tag.
               </p>
-              <p className="text-red-300 font-medium">
+              <p className="text-red-700 dark:text-red-300 font-medium">
                 ⚠️ Sending promotional broadcasts or bulk blasts outside the 24-hour window violates Meta Platform Terms and can lead to Facebook permanently restricting or banning your Pages.
               </p>
             </div>
 
             <div className="space-y-2 text-xs">
-              <label className="block text-slate-300 font-semibold">
-                To confirm you understand the risks, type <span className="font-mono text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/30">CONFIRM_OFF</span> below:
+              <label className="block text-slate-700 dark:text-slate-300 font-semibold">
+                To confirm you understand the risks, type <span className="font-mono text-red-700 dark:text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/30">CONFIRM_OFF</span> below:
               </label>
               <input
                 type="text"
                 value={confirmInput}
                 onChange={(e) => setConfirmInput(e.target.value)}
                 placeholder="Type CONFIRM_OFF here"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-red-500"
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-red-500 transition"
               />
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-800">
+            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => {
@@ -1398,6 +1673,35 @@ export function BotSetupTab({
           </div>
         </div>
       )}
+
+      {/* Delete Rule Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={Boolean(campaignToDelete)}
+        onClose={() => setCampaignToDelete(null)}
+        onConfirm={handleConfirmDeleteRule}
+        title="Delete Follow-Up Rule?"
+        itemName={campaignToDelete?.name || "Follow-Up Rule"}
+        itemType="Follow-Up Rule"
+        isDeleting={isDeletingCampaign}
+        details={[
+          { label: "Rule Name", value: campaignToDelete?.name || "N/A" },
+          {
+            label: "Inactivity Trigger",
+            value: `${campaignToDelete?.inactiveHoursThreshold ?? 24} hours without customer response`,
+          },
+          {
+            label: "Target Scope",
+            value: campaignToDelete?.pageId
+              ? pages.find((p) => p.pageId === campaignToDelete.pageId)?.name || "Specific Page"
+              : "All Connected Facebook Pages",
+          },
+          {
+            label: "Message Tag",
+            value: campaignToDelete?.messageTag || "HUMAN_AGENT",
+          },
+        ]}
+        warningText="Deleting this rule will permanently remove its message template, blast schedule, and associated automation settings."
+      />
     </div>
   );
 }

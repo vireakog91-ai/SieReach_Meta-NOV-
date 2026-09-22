@@ -2,6 +2,7 @@ export interface InitialPageData {
   pageId: string;
   name: string;
   category: string;
+  businessName?: string;
   avatarUrl: string;
   accessToken: string;
 }
@@ -24,40 +25,48 @@ export interface InitialLeadData {
 }
 
 export const INITIAL_PAGES: InitialPageData[] = [
+  // --- Business A: SieLab Retail Group (4 Facebook Pages) ---
   {
     pageId: "fb_page_01",
     name: "SieLab Fashion & Streetwear",
     category: "Clothing Brand & Apparel",
+    businessName: "SieLab Retail Group",
     avatarUrl: "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=150&auto=format&fit=crop&q=80",
     accessToken: "EAAB_mock_token_sielab_fashion_live_01",
   },
   {
     pageId: "fb_page_02",
     name: "SieLab Electronics & Gadgets",
-    category: "Consumer Electronics",
+    category: "Consumer Electronics & Tech",
+    businessName: "SieLab Retail Group",
     avatarUrl: "https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=150&auto=format&fit=crop&q=80",
     accessToken: "EAAB_mock_token_sielab_electronics_live_02",
   },
   {
     pageId: "fb_page_03",
     name: "SieLab Beauty & Skin Care",
-    category: "Health & Beauty",
+    category: "Health & Organic Cosmetics",
+    businessName: "SieLab Retail Group",
     avatarUrl: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=150&auto=format&fit=crop&q=80",
     accessToken: "EAAB_mock_token_sielab_beauty_live_03",
   },
   {
     pageId: "fb_page_04",
     name: "SieLab Home & Kitchen Decor",
-    category: "Home & Garden",
+    category: "Home & Interior Design",
+    businessName: "SieLab Retail Group",
     avatarUrl: "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=150&auto=format&fit=crop&q=80",
     accessToken: "EAAB_mock_token_sielab_home_live_04",
   },
+
+  // --- Business B: Moew Specialty Cafe & Lounge (1 Facebook Page) ---
   {
     pageId: "fb_page_05",
-    name: "SieLab Fitness & Activewear",
-    category: "Sporting Goods",
-    avatarUrl: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=150&auto=format&fit=crop&q=80",
-    accessToken: "EAAB_mock_token_sielab_fitness_live_05",
+    name: "Moew Specialty Cafe & Lounge",
+    category: "Specialty Coffee & Artisan Bakery",
+    businessName: "Moew Hospitality",
+    avatarUrl: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=150&auto=format&fit=crop&q=80",
+    accessToken: "EAAB_mock_token_moew_cafe_live_05",
   },
 ];
 
@@ -190,40 +199,40 @@ export const INITIAL_LEADS: InitialLeadData[] = [
     status: "AWAITING_CUSTOMER",
   },
 
-  // Page 5: SieLab Fitness
+  // Business B: Moew Specialty Cafe & Lounge (1 Facebook Page)
   {
     pageId: "fb_page_05",
-    psid: "psid_fit_01",
+    psid: "psid_cafe_01",
     customerName: "Alex Rivera",
     customerAvatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&auto=format&fit=crop&q=80",
-    adSource: "Ad #501: Seamless High-Waist Gym Leggings & Sports Bra",
-    lastCustomerMessage: "What sizes are left for the Olive Green set?",
+    adSource: "Ad #501: Weekend Artisan Brunch & Garden Terrace Table Booking",
+    lastCustomerMessage: "Do you take brunch table reservations for 6 people this Sunday morning?",
     lastCustomerMessageHoursAgo: 23.4,
-    lastAgentMessage: "Hi Alex! Medium and Large are both available in Olive Green right now. Would you like us to hold one for you before stock runs out?",
+    lastAgentMessage: "Hi Alex! Yes, our garden terrace has slots at 10:30 AM and 12:30 PM. Would you like me to hold a 6-seat table for you?",
     lastAgentMessageHoursAgo: 23.0,
     status: "AWAITING_CUSTOMER",
   },
   {
     pageId: "fb_page_05",
-    psid: "psid_fit_02",
+    psid: "psid_cafe_02",
     customerName: "Emily Zhao",
     customerAvatar: "https://images.unsplash.com/photo-1548142813-c348350df52b?w=100&auto=format&fit=crop&q=80",
-    adSource: "Ad #502: Resistance Bands 5-Level Workout Set",
-    lastCustomerMessage: "Does it come with an exercise instruction guide?",
+    adSource: "Ad #502: Handcrafted Basque Burnt Cheesecake & Custom Pastries",
+    lastCustomerMessage: "Do you make whole 8-inch Basque cheesecakes for birthday parties with custom plaques?",
     lastCustomerMessageHoursAgo: 16.0,
-    lastAgentMessage: "Yes Emily! It includes a printed manual + free access to our video training app. Should I reserve a set with today's discount?",
+    lastAgentMessage: "Yes Emily! Our pastry chef bakes whole cheesecakes with custom chocolate message plaques with 24h pre-order. When is the birthday?",
     lastAgentMessageHoursAgo: 15.5,
     status: "AWAITING_CUSTOMER",
   },
   {
     pageId: "fb_page_05",
-    psid: "psid_fit_03",
+    psid: "psid_cafe_03",
     customerName: "Samnang Ouk",
     customerAvatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=100&auto=format&fit=crop&q=80",
-    adSource: "Ad #503: Adjustable Dumbbells 24kg Pair",
-    lastCustomerMessage: "Can you deliver today?",
+    adSource: "Ad #503: Corporate Cold Brew Delivery & Office Catering Packs",
+    lastCustomerMessage: "Can you deliver 20 bottles of vanilla cold brew to Vattanac Tower today?",
     lastCustomerMessageHoursAgo: 30.0,
-    lastAgentMessage: "Hi Samnang! We can arrange same-day delivery if ordered before 2 PM. Please let us know your location!",
+    lastAgentMessage: "Hi Samnang! We can dispatch with our express courier within 2 hours. What time would you like delivery?",
     lastAgentMessageHoursAgo: 29.5,
     status: "FOLLOWED_UP",
     followUpCount: 1,
@@ -341,16 +350,16 @@ export const INITIAL_LEADS: InitialLeadData[] = [
     repliedAfterStep: 1,
     firstFollowedUpHoursAgo: 3.5,
   },
-  // Page 5: SieLab Fitness
+  // Business B: Moew Specialty Cafe & Lounge (Page 5)
   {
     pageId: "fb_page_05",
-    psid: "psid_fit_04_resp2",
+    psid: "psid_cafe_04_resp2",
     customerName: "Brandon Lee",
     customerAvatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80",
-    adSource: "Ad #503: Adjustable Dumbbells 24kg Pair",
-    lastCustomerMessage: "I see the final reminder with $10 off. Let's do it. When can you deliver?",
+    adSource: "Ad #504: Afternoon High Tea Set & Pastry Pairing for Two",
+    lastCustomerMessage: "I see the follow-up voucher with 15% off high tea! Let's do it. Please book 2 persons for tomorrow 3 PM.",
     lastCustomerMessageHoursAgo: 1.5,
-    lastAgentMessage: "Step 2: Last chance for your 24kg dumbbell pair!",
+    lastAgentMessage: "Step 2: Hi Brandon! Don't miss our complimentary pastry pairing with your afternoon tea booking!",
     lastAgentMessageHoursAgo: 3.0,
     status: "REPLIED",
     followUpCount: 2,

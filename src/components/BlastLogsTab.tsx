@@ -98,10 +98,10 @@ export function BlastLogsTab({
       </div>
 
       {/* Logs Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs dark:shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-950/70 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
+          <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+            <thead className="bg-slate-50 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
               <tr>
                 <th className="py-3.5 pl-4 pr-3">Status</th>
                 <th className="py-3.5 px-3">Recipient Customer</th>
@@ -110,30 +110,30 @@ export function BlastLogsTab({
                 <th className="py-3.5 px-3">Timestamp</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {filteredLogs.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-12 text-center text-slate-500">
                     <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
                     <p className="text-sm font-medium">No blast logs recorded yet</p>
-                    <p className="text-xs text-slate-600 mt-1">
+                    <p className="text-xs text-slate-400 mt-1">
                       Execute a blast from the Scanner or Bot Setup tabs to generate records.
                     </p>
                   </td>
                 </tr>
               ) : (
                 filteredLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-800/30 transition">
+                  <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition">
                     {/* Status Badge */}
                     <td className="py-3.5 pl-4 pr-3">
                       {log.status === "DELIVERED" ? (
-                        <span className="inline-flex items-center space-x-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                          <CheckCircle2 className="w-3 h-3" />
+                        <span className="inline-flex items-center space-x-1 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                           <span>Delivered</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center space-x-1 bg-red-500/10 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                          <XCircle className="w-3 h-3" />
+                        <span className="inline-flex items-center space-x-1 bg-rose-50 text-rose-700 border border-rose-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                          <XCircle className="w-3 h-3 text-rose-600 dark:text-red-400" />
                           <span>Failed</span>
                         </span>
                       )}
@@ -141,8 +141,8 @@ export function BlastLogsTab({
 
                     {/* Recipient */}
                     <td className="py-3.5 px-3">
-                      <div className="font-semibold text-white">{log.recipientName}</div>
-                      <div className="font-mono text-[10px] text-slate-500">{log.recipientPsid}</div>
+                      <div className="font-semibold text-slate-900 dark:text-white">{log.recipientName}</div>
+                      <div className="font-mono text-[10px] text-slate-400 dark:text-slate-500">{log.recipientPsid}</div>
                     </td>
 
                     {/* Page */}
@@ -159,15 +159,15 @@ export function BlastLogsTab({
                           <img
                             src={log.imageUrl}
                             alt="Attachment"
-                            className="w-12 h-12 rounded-lg object-cover ring-1 ring-slate-700 shrink-0"
+                            className="w-12 h-12 rounded-lg object-cover ring-1 ring-slate-200 dark:ring-slate-700 shrink-0"
                           />
                         )}
                         <div>
-                          <p className="text-slate-200 line-clamp-2 leading-relaxed">
+                          <p className="text-slate-700 dark:text-slate-200 line-clamp-2 leading-relaxed">
                             {log.messageSent}
                           </p>
                           {log.errorMessage && (
-                            <p className="text-[10px] text-red-400 mt-1 font-mono">
+                            <p className="text-[10px] text-red-600 dark:text-red-400 mt-1 font-mono">
                               Error: {log.errorMessage}
                             </p>
                           )}
@@ -176,7 +176,7 @@ export function BlastLogsTab({
                     </td>
 
                     {/* Timestamp */}
-                    <td className="py-3.5 px-3 text-slate-400 whitespace-nowrap text-[11px]">
+                    <td className="py-3.5 px-3 text-slate-500 dark:text-slate-400 whitespace-nowrap text-[11px]">
                       {new Date(log.sentAt).toLocaleString()}
                     </td>
                   </tr>

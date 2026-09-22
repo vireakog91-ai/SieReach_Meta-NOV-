@@ -8,16 +8,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model FacebookPage {
+model BusinessPortfolio {
   id          String   @id @default(cuid())
-  pageId      String   @unique
-  name        String
-  category    String   @default("Business")
-  avatarUrl   String?
-  accessToken String   @default("")
-  isActive    Boolean  @default(true)
+  name        String   @unique
+  industry    String?  @default("General")
+  icon        String?  @default("🏢")
+  description String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model FacebookPage {
+  id           String   @id @default(cuid())
+  pageId       String   @unique
+  name         String
+  category     String   @default("Business")
+  businessName String   @default("SieLab Retail Group")
+  avatarUrl    String?
+  accessToken  String   @default("")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   leads     LeadConversation[]
   campaigns FollowUpCampaign[]
@@ -55,11 +66,14 @@ model LeadConversation {
 model FollowUpCampaign {
   id                     String    @id @default(cuid())
   name                   String
-  pageId                 String?   // null if applies to all pages
+  businessName           String    @default("SieLab Retail Group") // dedicated business portfolio
+  pageId                 String?   // null if applies to all pages in this business portfolio
   page                   FacebookPage? @relation(fields: [pageId], references: [pageId], onDelete: SetNull)
   inactiveHoursThreshold Float     @default(24.0) // detect customer not responding after this many hours
   messageTemplate        String
   imageUrl               String?
+  imageUrls              String?   // JSON array of multiple uploaded poster URLs
+  enableImageSpin        Boolean   @default(false) // Randomly rotate across uploaded posters per customer
   messageTag             String?   @default("HUMAN_AGENT")
   autoBlast              Boolean   @default(false)
   excludePast24h         Boolean   @default(true) // Exclude leads >24h requiring HUMAN_AGENT tag by default

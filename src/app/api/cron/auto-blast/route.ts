@@ -43,10 +43,22 @@ export async function runAutoBlastSweep() {
     const cooldownHours = campaign.cooldownHours ?? 3.0;
 
     // Build lead query for this campaign: Target leads that haven't reached max follow-ups
+    // Strict Business Portfolio Isolation: Target leads strictly within the campaign's dedicated business portfolio
+    let targetPageIds: string[] = [];
+    if (campaign.pageId) {
+      targetPageIds = [campaign.pageId];
+    } else {
+      const bizPages = await prisma.facebookPage.findMany({
+        where: { businessName: campaign.businessName || "SieLab Retail Group" },
+        select: { pageId: true },
+      });
+      targetPageIds = bizPages.map((p) => p.pageId);
+    }
+
     const whereLead: any = {
       status: { in: ["AWAITING_CUSTOMER", "FOLLOWED_UP"] },
       followUpCount: { lt: maxFollowUps },
-      ...(campaign.pageId ? { pageId: campaign.pageId } : {}),
+      pageId: { in: targetPageIds },
     };
 
     const candidateLeads = await prisma.leadConversation.findMany({

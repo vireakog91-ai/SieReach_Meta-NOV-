@@ -57,6 +57,17 @@ html.light [class*="bg-slate-850"]:not(.telegram-mockup-screen):not(.telegram-mo
   border-color: #e2e8f0 !important;
 }
 
+/* Fallback for any unhandled dark slate containers, pills, or wrappers in light mode */
+html.light [class*="bg-slate-800"]:not(.telegram-mockup-screen):not(.telegram-mockup-screen *):not(button[class*="bg-blue"]):not(button[class*="bg-indigo"]):not(button[class*="bg-emerald"]):not(button[class*="bg-rose"]):not(button[class*="bg-purple"]):not([class*="dark:bg-slate-800"]) {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light input.bg-transparent {
+  color: #0f172a !important;
+}
+
 /* Borders and Dividers in light mode */
 html.light [class*="border-slate-800"],
 html.light [class*="border-slate-700"],
@@ -77,7 +88,7 @@ html.light header {
 
 /* Brand text in light mode */
 html.light header span.bg-clip-text {
-  background: linear-gradient(to right, #0f172a, #1e293b, #334155) !important;
+  background: linear-gradient(to right, #2563eb, #0284c7, #4f46e5) !important;
   -webkit-background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
 }
@@ -121,22 +132,22 @@ html.light [class*="hover:text-white"]:hover:not(.telegram-mockup-screen *):not(
 /* ========================================================================= */
 /* PROTECTED SOLID BUTTONS & TOASTS (Always preserve pure white text)        */
 /* ========================================================================= */
-html.light [class*="bg-blue-600"],
-html.light [class*="bg-blue-600"] *,
-html.light [class*="bg-emerald-600"],
-html.light [class*="bg-emerald-600"] *,
-html.light [class*="bg-purple-600"],
-html.light [class*="bg-purple-600"] *,
-html.light [class*="bg-rose-600"],
-html.light [class*="bg-rose-600"] *,
-html.light [class*="from-blue-600"],
-html.light [class*="from-blue-600"] *,
-html.light button[class*="bg-blue-600"],
-html.light button[class*="bg-blue-600"] span,
-html.light button[class*="bg-emerald-600"],
-html.light button[class*="bg-emerald-600"] span,
-html.light button[class*="bg-rose-600"],
-html.light button[class*="bg-rose-600"] span {
+html.light [class~="bg-blue-600"]:not([class*="dark:bg-blue-600"]),
+html.light [class~="bg-blue-600"]:not([class*="dark:bg-blue-600"]) *,
+html.light [class~="bg-emerald-600"]:not([class*="dark:bg-emerald-600"]),
+html.light [class~="bg-emerald-600"]:not([class*="dark:bg-emerald-600"]) *,
+html.light [class~="bg-purple-600"]:not([class*="dark:bg-purple-600"]),
+html.light [class~="bg-purple-600"]:not([class*="dark:bg-purple-600"]) *,
+html.light [class~="bg-rose-600"]:not([class*="dark:bg-rose-600"]),
+html.light [class~="bg-rose-600"]:not([class*="dark:bg-rose-600"]) *,
+html.light [class~="from-blue-600"]:not([class*="dark:from-blue-600"]),
+html.light [class~="from-blue-600"]:not([class*="dark:from-blue-600"]) *,
+html.light button[class~="bg-blue-600"],
+html.light button[class~="bg-blue-600"] span,
+html.light button[class~="bg-emerald-600"],
+html.light button[class~="bg-emerald-600"] span,
+html.light button[class~="bg-rose-600"],
+html.light button[class~="bg-rose-600"] span {
   color: #ffffff !important;
 }
 

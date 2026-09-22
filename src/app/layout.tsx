@@ -6,9 +6,9 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "SieReach - Facebook Follow-Up & Blast Automation",
+  title: "SieReach Meta for Facebook - Inactive Lead Recovery & Blast Automation",
   description:
-    "Multi-page Facebook Messenger Inactive Lead Detection & Automated Re-engagement Platform for Business Pages",
+    "Multi-page Facebook Messenger Inactive Lead Detection & Automated Re-engagement Platform for Business Pages - SieReach Meta",
 };
 
 export default function RootLayout({

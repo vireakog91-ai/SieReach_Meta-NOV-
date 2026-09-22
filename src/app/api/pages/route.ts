@@ -53,7 +53,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    let { pageId, name, category, avatarUrl, accessToken } = body;
+    let { pageId, name, category, businessName, avatarUrl, accessToken } = body;
 
     if (!pageId) {
       return NextResponse.json(
@@ -83,6 +83,7 @@ export async function POST(req: NextRequest) {
       update: {
         name,
         category: category || "Business Page",
+        businessName: businessName || "SieLab Retail Group",
         avatarUrl: avatarUrl || null,
         accessToken: accessToken || "",
         isActive: true,
@@ -91,6 +92,7 @@ export async function POST(req: NextRequest) {
         pageId,
         name,
         category: category || "Business Page",
+        businessName: businessName || "SieLab Retail Group",
         avatarUrl: avatarUrl || null,
         accessToken: accessToken || "",
         isActive: true,
@@ -109,7 +111,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    const { pageId, isActive, accessToken, name, syncProfile } = body;
+    const { pageId, isActive, accessToken, name, category, businessName, syncProfile } = body;
 
     if (!pageId) {
       return NextResponse.json(
@@ -119,7 +121,7 @@ export async function PUT(req: NextRequest) {
     }
 
     let updatedAvatar: string | undefined = undefined;
-    let updatedCategory: string | undefined = undefined;
+    let updatedCategory: string | undefined = category;
     let updatedName = name;
 
     if (syncProfile) {
@@ -142,6 +144,7 @@ export async function PUT(req: NextRequest) {
         ...(accessToken !== undefined ? { accessToken } : {}),
         ...(updatedName !== undefined ? { name: updatedName } : {}),
         ...(updatedCategory !== undefined ? { category: updatedCategory } : {}),
+        ...(businessName !== undefined ? { businessName } : {}),
         ...(updatedAvatar !== undefined ? { avatarUrl: updatedAvatar } : {}),
       },
     });

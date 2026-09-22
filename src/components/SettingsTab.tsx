@@ -77,26 +77,26 @@ export function SettingsTab({ isMockMode, onToggleMockMode }: SettingsTabProps) 
   return (
     <div className="max-w-4xl space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-white flex items-center space-x-2">
-          <Settings className="w-5 h-5 text-blue-400" />
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+          <Settings className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           <span>Meta Graph API & Platform Configuration</span>
         </h2>
-        <p className="text-xs text-slate-400 mt-1">
-          Configure connection settings, Facebook Developer App credentials, and webhook endpoints for SieReach.
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          Configure connection settings, Facebook Developer App credentials, and webhook endpoints for SieReach Meta for Facebook.
         </p>
       </div>
 
       {/* Appearance & Theme Preference */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs dark:shadow-sm space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center space-x-3">
-            <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              {theme === "dark" ? <Moon className="w-5 h-5 text-indigo-400" /> : <Sun className="w-5 h-5 text-amber-400" />}
+            <div className="p-2.5 rounded-xl bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20">
+              {theme === "dark" ? <Moon className="w-5 h-5 text-indigo-400" /> : <Sun className="w-5 h-5 text-amber-500" />}
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-white">Interface Theme</h3>
-              <p className="text-xs text-slate-400">
-                Choose between high-contrast dark mode and clean daylight light theme.
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Interface Theme</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Choose between clean daylight light theme and high-contrast dark mode.
               </p>
             </div>
           </div>
@@ -131,15 +131,15 @@ export function SettingsTab({ isMockMode, onToggleMockMode }: SettingsTabProps) 
       </div>
 
       {/* Mode Card */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs dark:shadow-sm space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-white">Execution Mode</h3>
-              <p className="text-xs text-slate-400">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Execution Mode</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Switch between offline Sandbox simulation and Live Facebook Graph API.
               </p>
             </div>
@@ -149,33 +149,33 @@ export function SettingsTab({ isMockMode, onToggleMockMode }: SettingsTabProps) 
             onClick={onToggleMockMode}
             className={`px-4 py-2 rounded-xl text-xs font-bold border transition ${
               isMockMode
-                ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/60"
-                : "bg-amber-950/60 border-amber-500/40 text-amber-400 hover:bg-amber-900/60"
+                ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:border-emerald-500/40 dark:text-emerald-400 dark:hover:bg-emerald-900/60"
+                : "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 dark:bg-amber-950/60 dark:border-amber-500/40 dark:text-amber-400 dark:hover:bg-amber-900/60"
             }`}
           >
             {isMockMode ? "Active: Sandbox Simulator" : "Active: Live Meta Graph API"}
           </button>
         </div>
 
-        <p className="text-xs text-slate-400 bg-slate-950/50 p-3 rounded-xl border border-slate-800/80 leading-relaxed">
+        <p className="text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-950/50 p-3 rounded-xl border border-slate-200 dark:border-slate-800/80 leading-relaxed">
           <strong>Sandbox Mode:</strong> Enables safe simulation of Messenger messages, scans, and blasts without needing approved Facebook App permissions or live tokens. Perfect for demos, onboarding, and testing templates.
         </p>
       </div>
 
       {/* Meta Webhooks Helper */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex items-center space-x-2 text-sm font-semibold text-white">
-          <Webhook className="w-4 h-4 text-purple-400" />
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs dark:shadow-sm space-y-4">
+        <div className="flex items-center space-x-2 text-sm font-bold text-slate-900 dark:text-white">
+          <Webhook className="w-4 h-4 text-purple-600 dark:text-purple-400" />
           <span>Facebook Messenger Webhook Details</span>
         </div>
 
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           In your Meta Developer App (Messenger &gt; Webhooks), configure this Callback URL and Verify Token to receive real-time inbound messages.
         </p>
 
         <div className="space-y-3 text-xs">
           <div>
-            <label className="block text-slate-400 font-semibold mb-1">Callback URL</label>
+            <label className="block text-slate-700 dark:text-slate-400 font-semibold mb-1">Callback URL</label>
             <div className="flex items-center space-x-2">
               <input
                 type="text"
@@ -194,7 +194,7 @@ export function SettingsTab({ isMockMode, onToggleMockMode }: SettingsTabProps) 
           </div>
 
           <div>
-            <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">Verify Token</label>
+            <label className="block text-slate-700 dark:text-slate-400 font-semibold mb-1">Verify Token</label>
             <input
               type="text"
               value={verifyToken}
@@ -206,15 +206,15 @@ export function SettingsTab({ isMockMode, onToggleMockMode }: SettingsTabProps) 
       </div>
 
       {/* Live App Credentials */}
-      <form onSubmit={handleSave} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4 text-xs">
-        <div className="flex items-center space-x-2 text-sm font-semibold text-white">
+      <form onSubmit={handleSave} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs dark:shadow-sm space-y-4 text-xs">
+        <div className="flex items-center space-x-2 text-sm font-bold text-slate-900 dark:text-white">
           <Key className="w-4 h-4 text-amber-500 dark:text-amber-400" />
           <span>Meta Developer App Credentials</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">App ID</label>
+            <label className="block text-slate-700 dark:text-slate-400 font-semibold mb-1">App ID</label>
             <input
               type="text"
               placeholder="e.g. 1092837465019"
@@ -225,7 +225,7 @@ export function SettingsTab({ isMockMode, onToggleMockMode }: SettingsTabProps) 
           </div>
 
           <div>
-            <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">App Secret</label>
+            <label className="block text-slate-700 dark:text-slate-400 font-semibold mb-1">App Secret</label>
             <input
               type="password"
               placeholder="••••••••••••••••"
@@ -236,9 +236,9 @@ export function SettingsTab({ isMockMode, onToggleMockMode }: SettingsTabProps) 
           </div>
         </div>
 
-        <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+        <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-800">
           {savedSuccess ? (
-            <span className="text-emerald-400 text-xs flex items-center space-x-1">
+            <span className="text-emerald-600 dark:text-emerald-400 text-xs flex items-center space-x-1 font-medium">
               <CheckCircle2 className="w-4 h-4" />
               <span>Settings saved successfully!</span>
             </span>
