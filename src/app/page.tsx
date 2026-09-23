@@ -566,39 +566,81 @@ export default function SieReachDashboard() {
     await runSequentialBlast(leadsToBlast, campaignId);
   };
 
-  // Handler: Confirm Immediate Page Blast Trigger
+  // Handler: Confirm Immediate Page Blast Trigger with Live Progress Screen
   const handleConfirmTriggerPage = async (pageId?: string) => {
+    const promptInfo = pageTriggerPrompt;
+    setPageTriggerPrompt(null); // Immediately close prompt modal so user is never blocked
+
+    const targetPageId = pageId || promptInfo?.pageId;
+    const targetCampaignId = promptInfo?.campaignId;
+
+    const activeCamp =
+      (targetCampaignId ? campaigns.find((c) => c.id === targetCampaignId) : null) ||
+      campaigns.find(
+        (c) => c.isActive && c.autoBlast && (!c.pageId || c.pageId === targetPageId)
+      ) ||
+      campaigns.find((c) => c.isActive && c.autoBlast) ||
+      campaigns[0];
+
+    const threshold = activeCamp?.inactiveHoursThreshold ?? thresholdHours;
+    const exclude24 = activeCamp?.excludePast24h ?? true;
+    const maxFollowUps = activeCamp?.maxFollowUps ?? 1;
+    const cooldownHours = activeCamp?.cooldownHours ?? 3.0;
+
     setIsBlasting(true);
     try {
-      const res = await fetch("/api/cron/auto-blast", { method: "POST" });
-      const data = await res.json();
-      await fetchData();
-      if (data.success && data.data) {
+      // 1. Fetch latest leads for target page to ensure freshest scan data
+      let pageLeads: AnalyzedLead[] = scannerData.leads;
+      if (targetPageId) {
+        try {
+          const res = await fetch(`/api/leads?thresholdHours=${threshold}&pageId=${targetPageId}`);
+          const json = await res.json();
+          if (json.success && json.summary?.leads) {
+            pageLeads = json.summary.leads;
+          }
+        } catch (fetchErr) {
+          console.warn("Could not refetch single page leads, falling back to summary leads", fetchErr);
+        }
+      }
+
+      // 2. Filter eligible leads matching campaign criteria
+      const leadsToBlast = pageLeads.filter((l: AnalyzedLead) => {
+        if (targetPageId && l.pageId !== targetPageId) return false;
+        if (l.status === "REPLIED" || l.status === "CONVERTED" || l.status === "CLOSED") return false;
+        if (l.followUpCount >= maxFollowUps) return false;
+        if (exclude24 && !l.within24h) return false;
+
+        if (l.followUpCount === 0) {
+          if (l.status !== "AWAITING_CUSTOMER") return false;
+          return l.hoursUnresponsive >= threshold;
+        } else {
+          return (l.hoursSinceLastFollowUp ?? 0) >= cooldownHours;
+        }
+      });
+
+      if (leadsToBlast.length === 0) {
         setBlastFeedback({
           show: true,
-          title: "Auto-Blast Triggered!",
-          message: `Sweep completed for active campaign. Eligible leads found: ${data.data.totalEligibleFound}, Delivered: ${data.data.totalDelivered}.`,
-          count: data.data.totalDelivered,
-        });
-      } else {
-        setBlastFeedback({
-          show: true,
-          title: "Auto-Blast Executed",
-          message: "Auto-blast sweep completed successfully.",
+          title: "No Eligible Leads Right Now",
+          message: `Active bot evaluated: 0 leads currently meet the criteria for ${promptInfo?.pageName || "this page"} (leads haven't crossed the ${threshold}h inactivity threshold or are outside Meta's 24h window).`,
           count: 0,
         });
+        setTimeout(() => setBlastFeedback(null), 5000);
+        setIsBlasting(false);
+        return;
       }
+
+      // 3. Launch live progress blast screen with drip countdown & "Close, Run in Background" option
+      await runSequentialBlast(leadsToBlast, activeCamp?.id);
     } catch (err: any) {
       console.error("Auto-blast trigger error:", err);
       setBlastFeedback({
         show: true,
-        title: "Auto-Blast Error",
+        title: "Blast Error",
         message: err?.message || "Failed to trigger auto-blast.",
         count: 0,
       });
-    } finally {
       setIsBlasting(false);
-      setPageTriggerPrompt(null);
       setTimeout(() => setBlastFeedback(null), 5000);
     }
   };

@@ -69,14 +69,13 @@ export function LiveBlastModal({
             </div>
           </div>
 
-          {isFinished && (
-            <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-white p-1 rounded-lg"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          )}
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white p-1 rounded-lg transition"
+            title={isFinished ? "Close" : "Close modal (blast continues in background)"}
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Progress Bar & Counter */}
@@ -173,28 +172,39 @@ export function LiveBlastModal({
         {/* Actions */}
         <div className="pt-2 flex items-center justify-between">
           {!isFinished ? (
-            <button
-              type="button"
-              onClick={onStop}
-              className="text-xs text-red-400 hover:text-red-300 font-medium px-3 py-1.5 rounded-xl border border-red-500/20 hover:bg-red-500/10 transition"
-            >
-              Stop Blast
-            </button>
-          ) : (
-            <span className="text-xs text-emerald-400 font-semibold flex items-center space-x-1">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>All messages dispatched successfully</span>
-            </span>
-          )}
+            <div className="flex items-center justify-between w-full">
+              <button
+                type="button"
+                onClick={onStop}
+                className="text-xs text-red-400 hover:text-red-300 font-medium px-3.5 py-2 rounded-xl border border-red-500/20 hover:bg-red-500/10 transition cursor-pointer"
+              >
+                Stop Blast
+              </button>
 
-          {isFinished && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-5 py-2 rounded-xl transition shadow-md shadow-blue-600/30"
-            >
-              Close & View Updated Logs
-            </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-xs text-slate-300 hover:text-white font-semibold px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition shadow-xs flex items-center space-x-1.5 cursor-pointer"
+                title="Keep blasting in background and close this popup"
+              >
+                <span>Close, Run In Background</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              <span className="text-xs text-emerald-400 font-semibold flex items-center space-x-1">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>All messages dispatched successfully</span>
+              </span>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-5 py-2 rounded-xl transition shadow-md shadow-blue-600/30 cursor-pointer"
+              >
+                Close & View Updated Logs
+              </button>
+            </>
           )}
         </div>
       </div>
