@@ -104,6 +104,30 @@ export function PagesManagerTab({
   const [pageToDelete, setPageToDelete] = useState<PageItem | null>(null);
   const [isDeletingPage, setIsDeletingPage] = useState(false);
 
+  // Live Step & Progress Indicator for Page Connection
+  const [connectStep, setConnectStep] = useState<number>(0);
+  const connectSteps = [
+    { title: "Verifying Page Token with Meta", desc: "Authenticating Graph API access...", progress: 25 },
+    { title: "Crawling Messenger Inbox", desc: "Reading customer conversations & messages from Meta...", progress: 55 },
+    { title: "Analyzing 24-Hour Policy Windows", desc: "Calculating inactivity hours & lead response deadlines...", progress: 85 },
+    { title: "Saving Leads & Syncing Dashboard", desc: "Finalizing business page integration...", progress: 95 },
+  ];
+
+  useEffect(() => {
+    if (!isSubmitting) {
+      setConnectStep(0);
+      return;
+    }
+    const timer1 = setTimeout(() => setConnectStep(1), 1200);
+    const timer2 = setTimeout(() => setConnectStep(2), 3200);
+    const timer3 = setTimeout(() => setConnectStep(3), 5500);
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+    };
+  }, [isSubmitting]);
+
   const handleTriggerPageBlast = async (pageId: string) => {
     if (!onTriggerBlastForPage) return;
     setTriggeringPageId(pageId);
@@ -607,20 +631,62 @@ export function PagesManagerTab({
                 </p>
               </div>
 
+              {/* Live Connection & Inbox Crawl Progress Card */}
+              {isSubmitting && (
+                <div className="bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-500/30 rounded-2xl p-4 space-y-2.5 animate-in fade-in duration-300">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center space-x-2">
+                      <RefreshCw className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 animate-spin" />
+                      <span className="font-bold text-blue-900 dark:text-blue-200">
+                        {connectSteps[connectStep].title}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-mono text-blue-600 dark:text-blue-400 font-bold">
+                      {connectSteps[connectStep].progress}%
+                    </span>
+                  </div>
+
+                  {/* Smooth Animated Progress Bar */}
+                  <div className="w-full bg-blue-200/60 dark:bg-blue-900/60 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 h-full rounded-full transition-all duration-700 ease-out"
+                      style={{ width: `${connectSteps[connectStep].progress}%` }}
+                    />
+                  </div>
+
+                  <p className="text-[11px] text-blue-700 dark:text-blue-300/80">
+                    {connectSteps[connectStep].desc}
+                  </p>
+
+                  <div className="flex items-center space-x-1.5 text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-blue-200/50 dark:border-blue-800/40">
+                    <ShieldCheck className="w-3 h-3 text-emerald-500 shrink-0" />
+                    <span>Importing live customer leads from Meta Graph API v21.0 servers.</span>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-3 py-1.5 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white font-medium"
+                  disabled={isSubmitting}
+                  className="px-3 py-1.5 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white font-medium disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-1.5 rounded-xl transition shadow-md shadow-blue-600/30"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-xl transition shadow-md shadow-blue-600/30 flex items-center space-x-1.5 disabled:opacity-75 cursor-pointer"
                 >
-                  {isSubmitting ? "Connecting..." : "Connect Page"}
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Importing Leads & Connecting...</span>
+                    </>
+                  ) : (
+                    <span>Connect Page</span>
+                  )}
                 </button>
               </div>
             </form>
