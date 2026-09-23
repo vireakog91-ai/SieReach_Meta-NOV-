@@ -74,9 +74,14 @@ export function normalizeImageUrl(url: string | null | undefined): string | null
   if (!url || !url.trim()) return null;
   const trimmed = url.trim();
 
-  // If local upload relative path (e.g. /uploads/poster_xyz.jpg)
+  // If local upload relative path (e.g. /api/uploads/photo_xyz.jpg or /uploads/poster_xyz.jpg)
   if (trimmed.startsWith("/")) {
-    const publicBase = (process.env.PUBLIC_URL || "").replace(/\/+$/, "");
+    const publicBase = (
+      process.env.PUBLIC_URL ||
+      (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "") ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
+      "https://siereach-meta.vercel.app"
+    ).replace(/\/+$/, "");
     if (publicBase) {
       return `${publicBase}${trimmed}`;
     }

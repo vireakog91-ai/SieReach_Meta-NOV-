@@ -417,6 +417,57 @@ export function BotSetupTab({
     setImageUrl(posterSlots[slotLabel] || "");
   };
 
+  // Client-side image compression: downscales large photos to max 1600px and 85% JPEG
+  const compressImageForUpload = async (file: File): Promise<File> => {
+    if (!file.type.startsWith("image/") || file.type.includes("svg")) {
+      return file;
+    }
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          const maxDim = 1600;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            resolve(file);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const safeName = file.name.replace(/\.[^.]+$/, ".jpg");
+                resolve(new File([blob], safeName, { type: "image/jpeg", lastModified: Date.now() }));
+              } else {
+                resolve(file);
+              }
+            },
+            "image/jpeg",
+            0.85
+          );
+        };
+        img.onerror = () => resolve(file);
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    });
+  };
+
   // Upload file to /api/upload and assign to current selected poster slot
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -424,15 +475,35 @@ export function BotSetupTab({
 
     setIsUploading(true);
     try {
+      // 1. Auto-compress large camera photos in browser (reduces 10MB down to ~400KB in 50ms)
+      const fileToUpload = await compressImageForUpload(file);
+
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", fileToUpload);
 
       const res = await fetch("/api/upload", {
         method: "POST",
         body: formData,
       });
+
+      if (!res.ok) {
+        const text = await res.text();
+        let errMsg = "Failed to upload image";
+        try {
+          const json = JSON.parse(text);
+          errMsg = json.error || errMsg;
+        } catch {
+          if (res.status === 413 || text.includes("Entity Too Large")) {
+            errMsg = "Image file is too large for upload. Please choose an image under 4MB.";
+          } else {
+            errMsg = `Upload failed (${res.status}): ${text.slice(0, 100)}`;
+          }
+        }
+        throw new Error(errMsg);
+      }
+
       const data = await res.json();
-      if (!res.ok || !data.success) {
+      if (!data.success || !data.url) {
         throw new Error(data.error || "Failed to upload image");
       }
 
@@ -1353,7 +1424,7 @@ export function BotSetupTab({
                   <button
                     type="button"
                     onClick={() => handleRemovePoster(selectedPoster)}
-                    className="flex items-center space-x-1 text-slate-400 hover:text-red-400 text-xs px-2.5 py-1.5 rounded-lg border border-slate-800 hover:border-red-500/30 transition"
+                    className="flex items-center space-x-1 text-slate-400 hover:text-red-400 text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-800 hover:border-red-500/30 transition"
                     title="Remove image from this slot"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -1373,6 +1444,21 @@ export function BotSetupTab({
                   <span className="text-slate-500">No flyer attached (Text-only message)</span>
                 )}
               </div>
+            </div>
+
+            {/* Direct URL / Google Drive link input option */}
+            <div className="pt-1">
+              <input
+                type="text"
+                value={posterSlots[selectedPoster] || ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setPosterSlots((prev) => ({ ...prev, [selectedPoster]: val }));
+                  setImageUrl(val);
+                }}
+                placeholder={`Or paste direct image URL / Google Drive sharing link for ${selectedPoster}...`}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition"
+              />
             </div>
 
             {/* Multi-Poster Spin Rotation Toggle (appears when 2+ posters uploaded) */}

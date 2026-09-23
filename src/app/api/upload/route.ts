@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,13 +16,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Maximum file limit: 50MB (matching Telegram Bot API limit)
-    const MAX_SIZE = 50 * 1024 * 1024;
+    // Maximum file limit: 10MB
+    const MAX_SIZE = 10 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
       return NextResponse.json(
         {
           success: false,
-          error: "File size exceeds 50MB limit allowed by Telegram Bot API.",
+          error: "File size exceeds 10MB limit. Please upload an image under 10MB.",
         },
         { status: 400 }
       );
@@ -49,20 +50,43 @@ export async function POST(req: NextRequest) {
       .replace(/[^a-zA-Z0-9_-]/g, "_")
       .slice(0, 30);
     const uniqueSuffix = crypto.randomBytes(4).toString("hex");
-    const uniqueName = `${detectedType}_${Date.now()}_${safeBase}_${uniqueSuffix}${originalExt || ""}`;
+    const uniqueName = `${detectedType}_${Date.now()}_${safeBase}_${uniqueSuffix}${originalExt || ".jpg"}`;
 
-    const uploadDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadDir, { recursive: true });
+    // 1. Store in Database for 100% reliability on Vercel Serverless
+    try {
+      await prisma.systemSetting.upsert({
+        where: { key: `upload_${uniqueName}` },
+        update: {
+          value: buffer.toString("base64"),
+          description: mime || "image/jpeg",
+        },
+        create: {
+          key: `upload_${uniqueName}`,
+          value: buffer.toString("base64"),
+          description: mime || "image/jpeg",
+        },
+      });
+    } catch (dbErr) {
+      console.warn("Could not save upload to database:", dbErr);
+    }
 
-    const filePath = path.join(uploadDir, uniqueName);
-    await writeFile(filePath, buffer);
+    // 2. Also try writing to local filesystem (works on local dev)
+    try {
+      const uploadDir = path.join(process.cwd(), "public", "uploads");
+      await mkdir(uploadDir, { recursive: true });
+      const filePath = path.join(uploadDir, uniqueName);
+      await writeFile(filePath, buffer);
+    } catch (fsErr) {
+      // On Vercel serverless, filesystem is read-only. Database fallback serves it.
+      console.info("Read-only filesystem detected, image served via database.");
+    }
 
-    // Return relative public URL that works both for browser and local server dispatch
-    const relativeUrl = `/uploads/${uniqueName}`;
+    // Return the universal endpoint URL
+    const publicUrl = `/api/uploads/${uniqueName}`;
 
     return NextResponse.json({
       success: true,
-      url: relativeUrl,
+      url: publicUrl,
       fileName: file.name,
       size: file.size,
       mimeType: file.type || "application/octet-stream",
