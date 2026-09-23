@@ -139,6 +139,25 @@ export default function SieReachDashboard() {
     campaignId: string;
   } | null>(null);
 
+  // Live Data Sync Timestamp & Relative Time Ticker
+  const [lastDataSyncTime, setLastDataSyncTime] = useState<Date | null>(null);
+  const [, setSyncTick] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setSyncTick((t) => t + 1), 10_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getRelativeSyncTime = (date: Date | null) => {
+    if (!date) return "Just now";
+    const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (diffSec < 10) return "Just now";
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
   // Fetch all data in parallel for high-speed sub-200ms loading
   const fetchData = useCallback(async () => {
     try {
@@ -204,6 +223,7 @@ export default function SieReachDashboard() {
     } finally {
       setIsLoading(false);
       setIsScanning(false);
+      setLastDataSyncTime(new Date());
     }
   }, [thresholdHours, selectedPageId]);
 
@@ -1036,17 +1056,51 @@ export default function SieReachDashboard() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 dark:border-slate-800/80 py-4 mt-12 bg-white/80 dark:bg-slate-950/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
-          <div className="flex items-center space-x-2">
-            <span className="font-semibold text-slate-400">SieReach Meta for Facebook</span>
-            <span>•</span>
-            <span>Empowering business sales recovery across Facebook Business Pages</span>
+      <footer className="border-t border-slate-200 dark:border-slate-800/80 py-5 mt-14 bg-white/90 dark:bg-slate-950/90 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between text-xs text-slate-500 gap-4">
+          {/* Left: System branding & Latest update by info */}
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 text-center md:text-left">
+            <span className="font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+              <span>🚀 SieReach Meta</span>
+              <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 text-[10px] font-mono border border-blue-200 dark:border-blue-500/30">
+                v2.4 Production
+              </span>
+            </span>
+            <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">•</span>
+            <span className="text-slate-600 dark:text-slate-400 flex items-center space-x-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>
+                Latest update by <strong className="text-slate-800 dark:text-slate-200 font-semibold">SieLab Engineering</strong>
+              </span>
+            </span>
           </div>
-          <div className="flex items-center space-x-3">
-            <span>Meta Graph API v21.0 Ready</span>
-            <span>•</span>
-            <span className="text-emerald-400">Status: Healthy</span>
+
+          {/* Center: Live Data Synchronization Status Badge */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => fetchData()}
+              disabled={isLoading || isScanning}
+              className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 flex items-center space-x-2 transition shadow-2xs group cursor-pointer disabled:opacity-60"
+              title="Click to refresh live lead data from Meta"
+            >
+              <RefreshCw className={`w-3 h-3 text-blue-500 transition-transform ${isLoading || isScanning ? "animate-spin" : "group-hover:rotate-180"}`} />
+              <span className="text-[11px] font-medium">
+                Last synced: <span className="font-semibold text-slate-900 dark:text-white">{getRelativeSyncTime(lastDataSyncTime)}</span>
+              </span>
+            </button>
+          </div>
+
+          {/* Right: Meta Graph API & Health Indicators */}
+          <div className="flex items-center space-x-3 text-[11px]">
+            <span className="text-slate-500 dark:text-slate-400">Meta Graph API v21.0</span>
+            <span className="text-slate-300 dark:text-slate-700">•</span>
+            <span className="inline-flex items-center space-x-1.5 text-emerald-600 dark:text-emerald-400 font-semibold">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>Engine: Healthy & Active</span>
+            </span>
           </div>
         </div>
       </footer>
