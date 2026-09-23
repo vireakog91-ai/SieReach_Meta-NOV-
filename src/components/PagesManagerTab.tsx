@@ -15,6 +15,7 @@ import {
   Sparkles,
   Check,
   AlertCircle,
+  Zap,
 } from "lucide-react";
 import { DeleteConfirmModal } from "./common/DeleteConfirmModal";
 
@@ -38,6 +39,15 @@ interface PageItem {
 
 interface PagesManagerTabProps {
   pages: PageItem[];
+  campaigns?: Array<{
+    id: string;
+    name: string;
+    businessName?: string;
+    pageId?: string | null;
+    isActive: boolean;
+    autoBlast: boolean;
+    inactiveHoursThreshold: number;
+  }>;
   portfolios?: Array<{ id: string; name: string; icon?: string; industry?: string; description?: string }>;
   activeBusiness?: string;
   onSelectBusiness?: (businessName: string) => void;
@@ -53,11 +63,13 @@ interface PagesManagerTabProps {
   onTogglePageActive: (pageId: string, isActive: boolean) => Promise<void>;
   onDeletePage: (pageId: string) => Promise<void>;
   onSyncProfile?: (pageId: string) => Promise<void>;
+  onTriggerBlastForPage?: (pageId: string) => Promise<void>;
   isMockMode: boolean;
 }
 
 export function PagesManagerTab({
   pages,
+  campaigns = [],
   portfolios = [],
   activeBusiness = "ALL",
   onSelectBusiness,
@@ -66,6 +78,7 @@ export function PagesManagerTab({
   onTogglePageActive,
   onDeletePage,
   onSyncProfile,
+  onTriggerBlastForPage,
   isMockMode,
 }: PagesManagerTabProps) {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -87,8 +100,19 @@ export function PagesManagerTab({
   } | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [syncingPageId, setSyncingPageId] = useState<string | null>(null);
+  const [triggeringPageId, setTriggeringPageId] = useState<string | null>(null);
   const [pageToDelete, setPageToDelete] = useState<PageItem | null>(null);
   const [isDeletingPage, setIsDeletingPage] = useState(false);
+
+  const handleTriggerPageBlast = async (pageId: string) => {
+    if (!onTriggerBlastForPage) return;
+    setTriggeringPageId(pageId);
+    try {
+      await onTriggerBlastForPage(pageId);
+    } finally {
+      setTriggeringPageId(null);
+    }
+  };
 
   // Synchronize newBusinessName whenever portfolios load or modal opens
   useEffect(() => {
@@ -243,11 +267,20 @@ export function PagesManagerTab({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {pages.map((page) => {
-          const matchedPortfolio = portfolios.find((p) => p.name === page.businessName);
+          {pages.map((page) => {
+            const matchedPortfolio = portfolios.find((p) => p.name === page.businessName);
           const businessLabel = page.businessName || "SieLab Retail Group";
           const businessIcon = matchedPortfolio?.icon || (businessLabel.includes("Moew") ? "☕" : "🏢");
           const isMoew = businessLabel.includes("Moew") || page.pageId === "fb_page_05";
+
+          // Detect active auto-blast campaign governing this page
+          const activeBotCampaign = campaigns.find(
+            (c) =>
+              c.isActive &&
+              c.autoBlast &&
+              (!c.pageId || c.pageId === page.pageId) &&
+              (!c.businessName || c.businessName === businessLabel)
+          );
 
           return (
             <div
@@ -324,6 +357,52 @@ export function PagesManagerTab({
                   </div>
                   <div className="text-[10px] text-amber-700 dark:text-amber-400/90 font-medium">Awaiting Reply</div>
                 </div>
+              </div>
+
+              {/* Active Bot Status & Trigger Action */}
+              <div className="mt-3 p-2.5 rounded-xl border bg-slate-50/80 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800/90 flex items-center justify-between text-xs">
+                <div className="flex items-center space-x-2 min-w-0 pr-2">
+                  {activeBotCampaign ? (
+                    <>
+                      <span className="relative flex h-2 w-2 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                      <div className="min-w-0">
+                        <span className="text-[9px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-bold block leading-none mb-0.5">
+                          Active Bot Campaign
+                        </span>
+                        <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate block">
+                          {activeBotCampaign.name}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <span className="inline-flex rounded-full h-2 w-2 bg-slate-400 dark:bg-slate-600 shrink-0"></span>
+                      <div className="min-w-0">
+                        <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold block leading-none mb-0.5">
+                          Bot Status
+                        </span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 block truncate">
+                          No Active Bot
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {onTriggerBlastForPage && activeBotCampaign && (
+                  <button
+                    onClick={() => handleTriggerPageBlast(page.pageId)}
+                    disabled={triggeringPageId === page.pageId}
+                    className="shrink-0 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition flex items-center space-x-1 shadow-xs cursor-pointer disabled:opacity-50"
+                    title={`Immediately execute ${activeBotCampaign.name} blast check for this page`}
+                  >
+                    <Zap className={`w-3 h-3 ${triggeringPageId === page.pageId ? "animate-spin" : ""}`} />
+                    <span>{triggeringPageId === page.pageId ? "Triggering..." : "Trigger Blast"}</span>
+                  </button>
+                )}
               </div>
             </div>
 

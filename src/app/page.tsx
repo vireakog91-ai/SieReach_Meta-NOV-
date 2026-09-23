@@ -17,6 +17,7 @@ import {
   Briefcase,
   Plus,
   Check,
+  Zap,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { StatsCards } from "@/components/StatsCards";
@@ -125,6 +126,17 @@ export default function SieReachDashboard() {
     title: string;
     message: string;
     count: number;
+  } | null>(null);
+
+  // Visual Interactive Prompt when connecting a page that matches an active campaign
+  const [pageTriggerPrompt, setPageTriggerPrompt] = useState<{
+    show: boolean;
+    pageId: string;
+    pageName: string;
+    businessName: string;
+    leadCount: number;
+    campaignName: string;
+    campaignId: string;
   } | null>(null);
 
   // Fetch all data in parallel for high-speed sub-200ms loading
@@ -554,6 +566,43 @@ export default function SieReachDashboard() {
     await runSequentialBlast(leadsToBlast, campaignId);
   };
 
+  // Handler: Confirm Immediate Page Blast Trigger
+  const handleConfirmTriggerPage = async (pageId?: string) => {
+    setIsBlasting(true);
+    try {
+      const res = await fetch("/api/cron/auto-blast", { method: "POST" });
+      const data = await res.json();
+      await fetchData();
+      if (data.success && data.data) {
+        setBlastFeedback({
+          show: true,
+          title: "Auto-Blast Triggered!",
+          message: `Sweep completed for active campaign. Eligible leads found: ${data.data.totalEligibleFound}, Delivered: ${data.data.totalDelivered}.`,
+          count: data.data.totalDelivered,
+        });
+      } else {
+        setBlastFeedback({
+          show: true,
+          title: "Auto-Blast Executed",
+          message: "Auto-blast sweep completed successfully.",
+          count: 0,
+        });
+      }
+    } catch (err: any) {
+      console.error("Auto-blast trigger error:", err);
+      setBlastFeedback({
+        show: true,
+        title: "Auto-Blast Error",
+        message: err?.message || "Failed to trigger auto-blast.",
+        count: 0,
+      });
+    } finally {
+      setIsBlasting(false);
+      setPageTriggerPrompt(null);
+      setTimeout(() => setBlastFeedback(null), 5000);
+    }
+  };
+
   // Handler: Add Page
   const handleAddPage = async (pageData: any) => {
     setIsScanning(true);
@@ -567,13 +616,39 @@ export default function SieReachDashboard() {
       await fetchData();
       if (data.success) {
         const leadCount = data.initialScanSummary?.totalLeads ?? 0;
-        setBlastFeedback({
-          show: true,
-          title: "Page Connected & Scanned!",
-          message: `Connected "${data.page?.name}" and immediately detected ${leadCount} conversation(s).`,
-          count: leadCount,
-        });
-        setTimeout(() => setBlastFeedback(null), 4000);
+        const pageName = data.page?.name || pageData.name;
+        const targetPageId = data.page?.pageId || pageData.pageId;
+        const businessName = data.page?.businessName || pageData.businessName || "SieLab Retail Group";
+
+        // Check if there are active auto-blast campaigns governing this business/page
+        const activeCamp = campaigns.find(
+          (c) =>
+            c.isActive &&
+            c.autoBlast &&
+            (!c.pageId || c.pageId === targetPageId) &&
+            (!c.businessName || c.businessName === businessName)
+        );
+
+        if (activeCamp) {
+          // Open interactive confirmation modal
+          setPageTriggerPrompt({
+            show: true,
+            pageId: targetPageId,
+            pageName,
+            businessName,
+            leadCount,
+            campaignName: activeCamp.name,
+            campaignId: activeCamp.id,
+          });
+        } else {
+          setBlastFeedback({
+            show: true,
+            title: "Page Connected & Scanned!",
+            message: `Connected "${pageName}" and immediately detected ${leadCount} conversation(s).`,
+            count: leadCount,
+          });
+          setTimeout(() => setBlastFeedback(null), 4000);
+        }
       }
     } catch (err: any) {
       console.error("Add page error:", err);
@@ -882,6 +957,7 @@ export default function SieReachDashboard() {
           {activeTab === "pages" && (
             <PagesManagerTab
               pages={scopedPages}
+              campaigns={campaigns}
               portfolios={portfolios}
               activeBusiness={selectedBusiness}
               onSelectBusiness={(biz) => {
@@ -893,6 +969,7 @@ export default function SieReachDashboard() {
               onTogglePageActive={handleTogglePageActive}
               onDeletePage={handleDeletePage}
               onSyncProfile={handleSyncProfile}
+              onTriggerBlastForPage={handleConfirmTriggerPage}
               isMockMode={isMockMode}
             />
           )}
@@ -960,6 +1037,78 @@ export default function SieReachDashboard() {
           }
         }}
       />
+
+      {/* Visual Interactive Prompt: Trigger Campaign for Newly Added Page */}
+      {pageTriggerPrompt && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-start space-x-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-500 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20 shadow-xs">
+                <Zap className="w-6 h-6 animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold border border-emerald-500/20 mb-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                  <span>Active Auto-Blast Running</span>
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Trigger Campaign for Newly Connected Page?
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  Connected <span className="font-semibold text-slate-900 dark:text-slate-200">"{pageTriggerPrompt.pageName}"</span> ({pageTriggerPrompt.leadCount} conversation{pageTriggerPrompt.leadCount === 1 ? "" : "s"} found). 
+                  Campaign <span className="font-semibold text-blue-600 dark:text-blue-400">"{pageTriggerPrompt.campaignName}"</span> is currently active for <span className="font-semibold">{pageTriggerPrompt.businessName}</span>.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-950/60 rounded-2xl p-4 border border-slate-200 dark:border-slate-800/80 text-xs space-y-2">
+              <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                <span className="font-medium text-slate-500 dark:text-slate-400">Active Rule:</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{pageTriggerPrompt.campaignName}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                <span className="font-medium text-slate-500 dark:text-slate-400">Target Portfolio:</span>
+                <span>{pageTriggerPrompt.businessName}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                <span className="font-medium text-slate-500 dark:text-slate-400">Safety Guard:</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Held idle until you confirm</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => handleConfirmTriggerPage(pageTriggerPrompt.pageId)}
+                disabled={isBlasting}
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/20 flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+              >
+                <Zap className="w-4 h-4" />
+                <span>{isBlasting ? "Evaluating & Blasting..." : "🚀 Yes, Trigger & Blast Now"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const pName = pageTriggerPrompt.pageName;
+                  setPageTriggerPrompt(null);
+                  setBlastFeedback({
+                    show: true,
+                    title: "Page Kept Safe (Paused)",
+                    message: `Page "${pName}" was connected safely. Auto-blast is paused for this page until you trigger it.`,
+                    count: 0,
+                  });
+                  setTimeout(() => setBlastFeedback(null), 4000);
+                }}
+                disabled={isBlasting}
+                className="w-full sm:w-auto py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition cursor-pointer"
+              >
+                ⏸️ Keep Paused / Not Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
