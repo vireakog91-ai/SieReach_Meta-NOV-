@@ -556,12 +556,30 @@ export default function SieReachDashboard() {
 
   // Handler: Add Page
   const handleAddPage = async (pageData: any) => {
-    await fetch("/api/pages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(pageData),
-    });
-    await fetchData();
+    setIsScanning(true);
+    try {
+      const res = await fetch("/api/pages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pageData),
+      });
+      const data = await res.json();
+      await fetchData();
+      if (data.success) {
+        const leadCount = data.initialScanSummary?.totalLeads ?? 0;
+        setBlastFeedback({
+          show: true,
+          title: "Page Connected & Scanned!",
+          message: `Connected "${data.page?.name}" and immediately detected ${leadCount} conversation(s).`,
+          count: leadCount,
+        });
+        setTimeout(() => setBlastFeedback(null), 4000);
+      }
+    } catch (err: any) {
+      console.error("Add page error:", err);
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   // Handler: Toggle Page Active

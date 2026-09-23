@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
       step2CampaignId,
       step2MessageTemplate,
       step2ImageUrl,
+      isActive,
     } = body;
 
     if (!name || !messageTemplate) {
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
         step2CampaignId: step2CampaignId || null,
         step2MessageTemplate: step2MessageTemplate || null,
         step2ImageUrl: step2ImageUrl || null,
-        isActive: true,
+        isActive: isActive !== undefined ? Boolean(isActive) : false,
       },
     });
 

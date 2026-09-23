@@ -26,6 +26,8 @@ import {
   Trash2,
   Check,
   Shuffle,
+  Play,
+  Pause,
 } from "lucide-react";
 import { renderMessageTemplate } from "@/lib/facebook";
 import { DeleteConfirmModal } from "./common/DeleteConfirmModal";
@@ -143,6 +145,8 @@ export function BotSetupTab({
       "Hi {{first_name}}, this is our final follow-up from {{page_name}} regarding {{ad_source}}! Let us know if you have any questions or would like to claim your offer."
   );
   const [step2ImageUrl, setStep2ImageUrl] = useState<string>(activeCampaign.step2ImageUrl || "");
+  const [isActive, setIsActive] = useState<boolean>(activeCampaign.isActive ?? false);
+  const [isTogglingActive, setIsTogglingActive] = useState<boolean>(false);
 
   // Safety Confirmation Modal State
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
@@ -183,25 +187,63 @@ export function BotSetupTab({
   const [blastState, setBlastState] = useState<"idle" | "blasting" | "success" | "error">("idle");
   const [blastMessage, setBlastMessage] = useState<string | null>(null);
 
-  const handleBlastClick = async () => {
-    if (!onExecuteCampaignBlast || selectedId === "new") return;
-    setBlastState("blasting");
+  const handleToggleActiveCampaign = async (makeActive: boolean) => {
+    if (!onSaveCampaign || selectedId === "new") return;
+    setIsTogglingActive(true);
     setBlastMessage(null);
     try {
-      await onExecuteCampaignBlast(selectedId);
-      setBlastState("success");
-      setBlastMessage("Delivered ✓");
+      await onSaveCampaign({
+        id: selectedId,
+        isActive: makeActive,
+      });
+      setIsActive(makeActive);
+      setBlastState(makeActive ? "success" : "idle");
+      setBlastMessage(makeActive ? "Auto-Blast Started! Background engine active." : "Auto-Blast Paused.");
+      if (makeActive) {
+        handleTriggerAutoCheck();
+      }
+      setTimeout(() => {
+        setBlastState("idle");
+        setBlastMessage(null);
+      }, 4000);
+    } catch (err: any) {
+      setBlastState("error");
+      setBlastMessage(err?.message || "Failed to update blast state");
       setTimeout(() => {
         setBlastState("idle");
         setBlastMessage(null);
       }, 5000);
-    } catch (err: any) {
-      setBlastState("error");
-      setBlastMessage(err?.message || "No eligible leads to blast");
-      setTimeout(() => {
-        setBlastState("idle");
-        setBlastMessage(null);
-      }, 6000);
+    } finally {
+      setIsTogglingActive(false);
+    }
+  };
+
+  const handleBlastClick = async () => {
+    if (selectedId === "new") return;
+    if (autoBlast) {
+      // Toggle between Start Blast and Pause Blast for automated mode
+      await handleToggleActiveCampaign(!isActive);
+    } else {
+      // Manual blast execution
+      if (!onExecuteCampaignBlast) return;
+      setBlastState("blasting");
+      setBlastMessage(null);
+      try {
+        await onExecuteCampaignBlast(selectedId);
+        setBlastState("success");
+        setBlastMessage("Delivered ✓");
+        setTimeout(() => {
+          setBlastState("idle");
+          setBlastMessage(null);
+        }, 5000);
+      } catch (err: any) {
+        setBlastState("error");
+        setBlastMessage(err?.message || "No eligible leads to blast");
+        setTimeout(() => {
+          setBlastState("idle");
+          setBlastMessage(null);
+        }, 6000);
+      }
     }
   };
 
@@ -260,6 +302,7 @@ export function BotSetupTab({
         "Hi {{first_name}}, this is our final follow-up from {{page_name}} regarding {{ad_source}}! Let us know if you have any questions or would like to claim your offer."
     );
     setStep2ImageUrl(c.step2ImageUrl || "");
+    setIsActive(c.isActive ?? false);
     setSaveError(null);
 
     setEnableImageSpin(c.enableImageSpin ?? false);
@@ -341,6 +384,7 @@ export function BotSetupTab({
       "Hi {{first_name}}, this is our final follow-up from {{page_name}} regarding {{ad_source}}! Let us know if you have any questions or would like to claim your offer."
     );
     setStep2ImageUrl("");
+    setIsActive(false);
     setSavedBaseline(null);
     setSaveError(null);
   };
@@ -543,12 +587,13 @@ export function BotSetupTab({
         step2CampaignId: step2CampaignId || null,
         step2MessageTemplate: step2MessageTemplate || null,
         step2ImageUrl: step2ImageUrl || null,
-        isActive: true,
+        isActive: false, // Save as Draft - Never auto-executes upon save
       });
 
       if (saved?.id) {
         setSelectedId(saved.id);
       }
+      setIsActive(false);
       // Update baseline to reflect saved state
       setSavedBaseline({
         name,
@@ -634,9 +679,17 @@ export function BotSetupTab({
               <button
                 type="button"
                 onClick={() => handleSelectCampaign(c)}
-                className="cursor-pointer text-left mr-1.5 focus:outline-none"
+                className="cursor-pointer text-left mr-1.5 focus:outline-none flex items-center space-x-1.5"
               >
-                {c.name} ({c.inactiveHoursThreshold}h)
+                {c.autoBlast && (
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      c.isActive ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
+                    }`}
+                    title={c.isActive ? "Active (Blasting)" : "Draft (Paused)"}
+                  />
+                )}
+                <span>{c.name} ({c.inactiveHoursThreshold}h)</span>
               </button>
               {onDeleteCampaign && (
                 <button
@@ -1392,32 +1445,50 @@ export function BotSetupTab({
 
           {/* Active Auto-Pilot Engine Info & Test Trigger */}
           {autoBlast && (
-            <div className="bg-emerald-950/30 border border-emerald-500/30 rounded-2xl p-3.5 space-y-2 animate-in fade-in">
+            <div className={`rounded-2xl p-3.5 space-y-2 animate-in fade-in border ${
+              isActive
+                ? "bg-emerald-950/30 border-emerald-500/30"
+                : "bg-slate-100 border-slate-300 dark:bg-slate-800/60 dark:border-slate-700/80"
+            }`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2.5">
-                  <div className="w-7 h-7 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                    <Zap className="w-4 h-4" />
+                  <div className={`w-7 h-7 rounded-xl flex items-center justify-center ${
+                    isActive
+                      ? "bg-emerald-500/20 text-emerald-400"
+                      : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                  }`}>
+                    {isActive ? <Zap className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-white flex items-center space-x-1.5">
-                      <span>Background Auto-Pilot Running</span>
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+                      <span>{isActive ? "Background Auto-Pilot Running" : "Auto-Pilot Configured (Draft / Paused)"}</span>
+                      {isActive ? (
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                      ) : (
+                        <span className="text-[10px] text-amber-600 dark:text-amber-400 font-normal">● Click &quot;Start Blast&quot; below to launch</span>
+                      )}
                     </div>
-                    <div className="text-[11px] text-slate-400">
-                      Monitoring leads every 30s. Automatically follows up at <span className="text-emerald-300 font-semibold">{thresholdHours}h</span> silence with {dripMin}s-{dripMax}s drip.
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {isActive ? (
+                        <>Monitoring leads every 30s. Automatically follows up at <span className="text-emerald-500 dark:text-emerald-300 font-semibold">{thresholdHours}h</span> silence with {dripMin}s-{dripMax}s drip.</>
+                      ) : (
+                        <>Rule is saved as draft. Background blast is currently dormant. Click &quot;Start Blast&quot; to activate.</>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleTriggerAutoCheck}
-                  disabled={isRunningAutoCheck}
-                  className="flex items-center space-x-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition disabled:opacity-50 shrink-0"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isRunningAutoCheck ? "animate-spin" : ""}`} />
-                  <span>{isRunningAutoCheck ? "Checking..." : "Run Auto-Check Now"}</span>
-                </button>
+                {isActive && (
+                  <button
+                    type="button"
+                    onClick={handleTriggerAutoCheck}
+                    disabled={isRunningAutoCheck}
+                    className="flex items-center space-x-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition disabled:opacity-50 shrink-0"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRunningAutoCheck ? "animate-spin" : ""}`} />
+                    <span>{isRunningAutoCheck ? "Checking..." : "Run Auto-Check Now"}</span>
+                  </button>
+                )}
               </div>
 
               {autoCheckResult && (
@@ -1429,7 +1500,7 @@ export function BotSetupTab({
           )}
 
           {/* Save & Action Buttons */}
-          <div className="flex items-center justify-between pt-4 border-t border-slate-800">
+          <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
             <div className="flex items-center space-x-2">
               <button
                 type="button"
@@ -1442,36 +1513,50 @@ export function BotSetupTab({
               </button>
 
               {saveSuccess && (
-                <span className="text-xs text-emerald-400 flex items-center space-x-1 animate-in fade-in">
+                <span className="text-xs text-emerald-500 dark:text-emerald-400 flex items-center space-x-1 animate-in fade-in">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Rule Saved!</span>
+                  <span>Rule Saved as Draft!</span>
                 </span>
               )}
 
               {saveError && (
-                <span className="text-xs text-red-400 flex items-center space-x-1 animate-in fade-in">
+                <span className="text-xs text-red-500 dark:text-red-400 flex items-center space-x-1 animate-in fade-in">
                   <AlertTriangle className="w-3.5 h-3.5" />
                   <span>{saveError}</span>
                 </span>
               )}
             </div>
 
-            {selectedId !== "new" && onExecuteCampaignBlast && (
+            {selectedId !== "new" && (
               <div className="flex items-center space-x-2">
                 {hasUnsavedChanges && (
-                  <span className="text-[11px] text-amber-400/90 font-medium flex items-center space-x-1 animate-in fade-in mr-1">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="text-[11px] text-amber-500 dark:text-amber-400/90 font-medium flex items-center space-x-1 animate-in fade-in mr-1">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 shrink-0" />
                     <span>Save Bot Rule to enable blast</span>
                   </span>
                 )}
                 <button
                   type="button"
                   onClick={handleBlastClick}
-                  disabled={blastState === "blasting" || isBlasting || hasUnsavedChanges}
-                  title={hasUnsavedChanges ? "Please click \"Save Bot Rule\" first to apply your changes before blasting" : "Dispatch blast follow-up"}
+                  disabled={blastState === "blasting" || isBlasting || isTogglingActive || hasUnsavedChanges}
+                  title={
+                    hasUnsavedChanges
+                      ? 'Please click "Save Bot Rule" first to apply your changes before blasting'
+                      : autoBlast
+                      ? isActive
+                        ? "Click to pause automated background follow-up blast"
+                        : "Click to start automated background follow-up blast"
+                      : "Start manual follow-up blast"
+                  }
                   className={`flex items-center space-x-1.5 text-xs font-bold px-4 py-2 rounded-xl transition shadow-md disabled:opacity-40 disabled:cursor-not-allowed ${
                     hasUnsavedChanges
                       ? "bg-slate-200 text-slate-500 border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
+                      : isTogglingActive
+                      ? "bg-blue-600 text-white"
+                      : autoBlast && isActive
+                      ? "bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/30"
+                      : autoBlast && !isActive
+                      ? "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/30"
                       : blastState === "success"
                       ? "bg-emerald-600 text-white shadow-emerald-600/30"
                       : blastState === "error"
@@ -1479,8 +1564,12 @@ export function BotSetupTab({
                       : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 shadow-amber-500/20"
                   }`}
                 >
-                  {blastState === "blasting" || isBlasting ? (
-                    <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                  {isTogglingActive || blastState === "blasting" || isBlasting ? (
+                    <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                  ) : autoBlast && isActive ? (
+                    <Pause className="w-4 h-4 fill-white" />
+                  ) : autoBlast && !isActive ? (
+                    <Play className="w-4 h-4 fill-white" />
                   ) : blastState === "success" ? (
                     <CheckCircle2 className="w-4 h-4 text-white animate-in zoom-in" />
                   ) : blastState === "error" ? (
@@ -1489,19 +1578,33 @@ export function BotSetupTab({
                     <Send className="w-4 h-4" />
                   )}
                   <span>
-                    {blastState === "blasting" || isBlasting
+                    {isTogglingActive
+                      ? isActive
+                        ? "Pausing..."
+                        : "Starting..."
+                      : blastState === "blasting" || isBlasting
                       ? "Blasting..."
                       : blastState === "success"
-                      ? "Blasted Successfully!"
+                      ? "Delivered ✓"
                       : blastState === "error"
                       ? "Blast Failed"
-                      : "Blast Now"}
+                      : autoBlast
+                      ? isActive
+                        ? "Pause Blast"
+                        : "Start Blast"
+                      : "Start Blast"}
                   </span>
                 </button>
 
-                {blastState === "error" && blastMessage && (
-                  <span className="text-xs text-red-400 font-semibold flex items-center space-x-1 animate-in fade-in">
-                    <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                {blastMessage && (
+                  <span className={`text-xs font-semibold flex items-center space-x-1 animate-in fade-in ${
+                    blastState === "error" ? "text-red-400" : "text-emerald-400"
+                  }`}>
+                    {blastState === "error" ? (
+                      <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                    ) : (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
                     <span>{blastMessage}</span>
                   </span>
                 )}

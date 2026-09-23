@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { fetchFacebookPageProfile } from "@/lib/facebook";
+import { scanInactiveLeads } from "@/lib/scanner";
 
 export async function GET() {
   try {
@@ -99,7 +100,26 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ success: true, page, profileFetched });
+    // Immediately scan for live leads for this newly connected page
+    let initialScanSummary = null;
+    if (accessToken) {
+      try {
+        const scanRes = await scanInactiveLeads(24.0, page.pageId);
+        initialScanSummary = {
+          totalLeads: scanRes.totalLeads,
+          unresponsiveCount: scanRes.unresponsiveCount,
+        };
+      } catch (scanErr) {
+        console.error(`Initial scan failed for page ${page.pageId}:`, scanErr);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      page,
+      profileFetched,
+      initialScanSummary,
+    });
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err.message },
