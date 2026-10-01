@@ -247,39 +247,6 @@ export function BotSetupTab({
     }
   };
 
-  const isFirstLoadRef = React.useRef(true);
-
-  // Automatically select and populate first campaign when campaigns load or portfolio changes
-  React.useEffect(() => {
-    if (campaigns.length > 0) {
-      if (isFirstLoadRef.current) {
-        isFirstLoadRef.current = false;
-        handleSelectCampaign(campaigns[0]);
-      } else {
-        const currentExists = campaigns.some((c) => c.id === selectedId);
-        if (!currentExists && selectedId !== "new") {
-          handleSelectCampaign(campaigns[0]);
-        }
-      }
-    }
-  }, [campaigns, selectedId]);
-
-  // Quick image preset flyers
-  const sampleImages = [
-    {
-      label: "Poster 1",
-      url: "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800&auto=format&fit=crop&q=80",
-    },
-    {
-      label: "Poster 2",
-      url: "https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=800&auto=format&fit=crop&q=80",
-    },
-    {
-      label: "Poster 3",
-      url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80",
-    },
-  ];
-
   // Load campaign when switching tabs/selection
   const handleSelectCampaign = (c: Campaign) => {
     setSelectedId(c.id);
@@ -360,6 +327,39 @@ export function BotSetupTab({
       step2ImageUrl: c.step2ImageUrl || "",
     });
   };
+
+  const isFirstLoadRef = React.useRef(true);
+
+  // Automatically select and populate first campaign when campaigns load or portfolio changes
+  React.useEffect(() => {
+    if (campaigns.length > 0) {
+      if (isFirstLoadRef.current) {
+        isFirstLoadRef.current = false;
+        handleSelectCampaign(campaigns[0]);
+      } else {
+        const currentExists = campaigns.some((c) => c.id === selectedId);
+        if (!currentExists && selectedId !== "new") {
+          handleSelectCampaign(campaigns[0]);
+        }
+      }
+    }
+  }, [campaigns, selectedId]);
+
+  // Quick image preset flyers
+  const sampleImages = [
+    {
+      label: "Poster 1",
+      url: "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800&auto=format&fit=crop&q=80",
+    },
+    {
+      label: "Poster 2",
+      url: "https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=800&auto=format&fit=crop&q=80",
+    },
+    {
+      label: "Poster 3",
+      url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80",
+    },
+  ];
 
   const handleNewRule = () => {
     setSelectedId("new");

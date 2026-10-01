@@ -16,12 +16,18 @@ const ThemeContext = createContext<ThemeContextType>({
   setTheme: () => {},
 });
 
+function applyTheme(t: Theme) {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  root.classList.remove("light", "dark");
+  root.classList.add(t);
+  root.setAttribute("data-theme", t);
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("dark");
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     const saved = localStorage.getItem("sielab_reach_theme") as Theme | null;
     if (saved === "light" || saved === "dark") {
       setThemeState(saved);
@@ -31,13 +37,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       applyTheme("dark");
     }
   }, []);
-
-  const applyTheme = (t: Theme) => {
-    const root = document.documentElement;
-    root.classList.remove("light", "dark");
-    root.classList.add(t);
-    root.setAttribute("data-theme", t);
-  };
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);

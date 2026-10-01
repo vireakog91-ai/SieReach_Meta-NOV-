@@ -64,7 +64,7 @@ export async function executeFollowUpBlast(
   } = params;
 
   // Retrieve campaign if ID provided
-  let campaign = campaignId
+  const campaign = campaignId
     ? await prisma.followUpCampaign.findUnique({ where: { id: campaignId } })
     : null;
 
@@ -120,7 +120,7 @@ export async function executeFollowUpBlast(
   const now = new Date();
   let excludedPast24hCount = 0;
 
-  let step2Campaign = campaign?.step2CampaignId
+  const step2Campaign = campaign?.step2CampaignId
     ? await prisma.followUpCampaign.findUnique({ where: { id: campaign.step2CampaignId } })
     : null;
 
@@ -285,7 +285,7 @@ export async function executeFollowUpBlast(
           recipientPsid: lead.psid,
           recipientName: lead.customerName,
           messageSent: personalizedText,
-          imageUrl: imageToUse,
+          imageUrl: leadImage,
           status: "DELIVERED",
           step: stepNumber,
           sentAt: messageSentAt,
@@ -317,7 +317,7 @@ export async function executeFollowUpBlast(
           recipientPsid: lead.psid,
           recipientName: lead.customerName,
           messageSent: personalizedText,
-          imageUrl: imageToUse,
+          imageUrl: leadImage,
           status: "FAILED",
           step: stepNumber,
           errorMessage: sendResult.error,

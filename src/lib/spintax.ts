@@ -11,11 +11,13 @@ export function parseSpintax(text: string): string {
   const spintaxRegex = /\{([^{}]+)\}/;
   let matches;
   let result = text;
+  let iterations = 0;
 
-  while ((matches = spintaxRegex.exec(result))) {
+  while ((matches = spintaxRegex.exec(result)) && iterations < 50) {
     const options = matches[1].split("|");
     const chosen = options[Math.floor(Math.random() * options.length)];
     result = result.replace(matches[0], chosen);
+    iterations++;
   }
 
   return result;

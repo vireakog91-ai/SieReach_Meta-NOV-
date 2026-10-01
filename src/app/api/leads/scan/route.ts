@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { scanInactiveLeads } from "@/lib/scanner";
+import { requireAdminAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  const unauthorized = await requireAdminAuth(req);
+  if (unauthorized) return unauthorized;
+
   try {
     const body = await req.json().catch(() => ({}));
     const thresholdHours = parseFloat(body.thresholdHours || "24.0");

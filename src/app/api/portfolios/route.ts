@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAdminAuth } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const unauthorized = await requireAdminAuth(req);
+  if (unauthorized) return unauthorized;
+
   try {
     const portfolios = await prisma.businessPortfolio.findMany({
       orderBy: { createdAt: "asc" },
@@ -50,6 +54,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const unauthorized = await requireAdminAuth(req);
+  if (unauthorized) return unauthorized;
+
   try {
     const body = await req.json();
     const { name, industry, icon, description } = body;
@@ -94,6 +101,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const unauthorized = await requireAdminAuth(req);
+  if (unauthorized) return unauthorized;
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");

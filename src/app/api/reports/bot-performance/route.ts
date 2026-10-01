@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAdminAuth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const unauthorized = await requireAdminAuth(req);
+  if (unauthorized) return unauthorized;
+
   try {
     const { searchParams } = new URL(req.url);
     const filterPageId = searchParams.get("pageId");
@@ -22,7 +26,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Date filtering: support specific calendar date range or relative days
-    let dateFilter: { gte?: Date; lte?: Date } = {};
+    const dateFilter: { gte?: Date; lte?: Date } = {};
 
     if (startDateParam || endDateParam) {
       if (startDateParam) {
@@ -181,8 +185,8 @@ export async function GET(req: NextRequest) {
 
     // --- Average Response Time Benchmark ---
     // Calculate average minutes taken by customers to reply after Step 1 and Step 2
-    let step1DurationsMinutes: number[] = [];
-    let step2DurationsMinutes: number[] = [];
+    const step1DurationsMinutes: number[] = [];
+    const step2DurationsMinutes: number[] = [];
 
     for (const lead of step1RepliedLeads) {
       if (lead.firstFollowedUpAt && lead.lastCustomerMessageAt) {

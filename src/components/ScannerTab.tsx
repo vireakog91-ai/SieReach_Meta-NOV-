@@ -16,6 +16,7 @@ import {
   Columns,
   Rows,
   Ban,
+  Send,
 } from "lucide-react";
 import { AnalyzedLead } from "@/lib/scanner";
 
@@ -44,13 +45,19 @@ function getBusinessBadgeInfo(businessName?: string) {
 
 export function ScannerTab({
   leads,
+  thresholdHours = 24.0,
+  onThresholdChange,
   onRefreshScan,
   isScanning,
+  onTriggerBlast,
+  isBlasting = false,
 }: ScannerTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE_24H" | "UNRESPONSIVE" | "EXPIRED" | "FOLLOWED_UP">("ALL");
   const [excludeExpired, setExcludeExpired] = useState(false);
   const [viewMode, setViewMode] = useState<"compact" | "standard">("compact");
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
+
 
   // Metrics
   const active24hCount = leads.filter(
@@ -98,6 +105,43 @@ export function ScannerTab({
 
     return true;
   });
+
+  const eligibleFilteredLeads = filteredLeads.filter((l) => l.isEligibleForFollowUp);
+  const isAllSelected =
+    filteredLeads.length > 0 &&
+    filteredLeads.every((l) => selectedLeadIds.includes(l.id));
+  const isSomeSelected =
+    filteredLeads.some((l) => selectedLeadIds.includes(l.id)) && !isAllSelected;
+
+  const handleToggleAll = (checked: boolean) => {
+    if (checked) {
+      const allIds = Array.from(new Set([...selectedLeadIds, ...filteredLeads.map((l) => l.id)]));
+      setSelectedLeadIds(allIds);
+    } else {
+      const filteredIdSet = new Set(filteredLeads.map((l) => l.id));
+      setSelectedLeadIds(selectedLeadIds.filter((id) => !filteredIdSet.has(id)));
+    }
+  };
+
+  const handleSelectEligibleOnly = () => {
+    const eligibleIds = eligibleFilteredLeads.map((l) => l.id);
+    setSelectedLeadIds(eligibleIds);
+  };
+
+  const handleToggleLead = (id: string) => {
+    setSelectedLeadIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleClearSelection = () => {
+    setSelectedLeadIds([]);
+  };
+
+  const handleExecuteSelectedBlast = () => {
+    if (selectedLeadIds.length === 0 || !onTriggerBlast) return;
+    onTriggerBlast(selectedLeadIds);
+  };
 
   return (
     <div className="space-y-6">
@@ -220,6 +264,26 @@ export function ScannerTab({
                 </span>
               )}
             </button>
+
+            {/* Threshold Selector */}
+            {onThresholdChange && (
+              <div className="flex items-center space-x-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 text-xs">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Silent:</span>
+                <select
+                  value={thresholdHours}
+                  onChange={(e) => onThresholdChange(parseFloat(e.target.value))}
+                  className="bg-transparent text-slate-800 dark:text-slate-200 font-bold focus:outline-none cursor-pointer text-xs"
+                  title="Filter leads inactive for at least this many hours"
+                >
+                  <option value={3}>≥ 3 Hours</option>
+                  <option value={6}>≥ 6 Hours</option>
+                  <option value={12}>≥ 12 Hours</option>
+                  <option value={24}>≥ 24 Hours</option>
+                  <option value={48}>≥ 48 Hours</option>
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Action buttons */}
@@ -246,16 +310,26 @@ export function ScannerTab({
             <table className="w-full table-fixed text-left text-xs text-slate-600 dark:text-slate-300">
               <thead className="bg-slate-50/90 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                 <tr>
-                  <th className="py-3 pl-4 pr-2 w-[24%]">Customer & Ad Campaign</th>
+                  <th className="py-3 pl-3 pr-1 w-[40px] text-center">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all leads"
+                      checked={isAllSelected}
+                      ref={(el) => { if (el) el.indeterminate = isSomeSelected; }}
+                      onChange={(e) => handleToggleAll(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </th>
+                  <th className="py-3 pl-2 pr-2 w-[23%]">Customer & Ad Campaign</th>
                   <th className="py-3 px-2 w-[22%]">Facebook Business Page</th>
-                  <th className="py-3 px-2 w-[36%]">Conversation Status & Inactivity</th>
-                  <th className="py-3 px-3 pr-4 w-[18%] text-right">Meta 24H Window & Status</th>
+                  <th className="py-3 px-2 w-[35%]">Conversation Status & Inactivity</th>
+                  <th className="py-3 px-3 pr-4 w-[17%] text-right">Meta 24H Window & Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                 {filteredLeads.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-12 text-center text-slate-500">
+                    <td colSpan={5} className="py-12 text-center text-slate-500">
                       <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-40" />
                       <p className="text-sm font-medium">No leads found matching current filter</p>
                       <p className="text-xs mt-1 text-slate-400">
@@ -273,8 +347,20 @@ export function ScannerTab({
                     return (
                       <tr
                         key={lead.id}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition"
+                        className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 transition ${
+                          selectedLeadIds.includes(lead.id) ? "bg-blue-50/50 dark:bg-blue-950/20" : ""
+                        }`}
                       >
+                        {/* Checkbox */}
+                        <td className="py-2.5 pl-3 pr-1 text-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${lead.customerName}`}
+                            checked={selectedLeadIds.includes(lead.id)}
+                            onChange={() => handleToggleLead(lead.id)}
+                            className="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                        </td>
                         {/* 1. Customer & Ad Campaign */}
                         <td className="py-2.5 pl-4 pr-2">
                           <div className="flex items-center space-x-2.5 min-w-0">
@@ -475,7 +561,17 @@ export function ScannerTab({
             <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
               <thead className="bg-slate-50/90 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                 <tr>
-                  <th className="py-3.5 pl-4 pr-3 min-w-[220px]">Customer & Ad Campaign</th>
+                  <th className="py-3.5 pl-3 pr-1 w-[40px] text-center">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all leads"
+                      checked={isAllSelected}
+                      ref={(el) => { if (el) el.indeterminate = isSomeSelected; }}
+                      onChange={(e) => handleToggleAll(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </th>
+                  <th className="py-3.5 pl-2 pr-3 min-w-[220px]">Customer & Ad Campaign</th>
                   <th className="py-3.5 px-3 min-w-[210px]">Facebook Business Page</th>
                   <th className="py-3.5 px-3 min-w-[320px]">Conversation Status & Inactivity</th>
                   <th className="py-3.5 px-3 min-w-[150px]">Meta 24h Window</th>
@@ -485,7 +581,7 @@ export function ScannerTab({
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                 {filteredLeads.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-slate-500">
+                    <td colSpan={6} className="py-12 text-center text-slate-500">
                       <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-40" />
                       <p className="text-sm font-medium">No leads found matching current filter</p>
                       <p className="text-xs mt-1 text-slate-400">
@@ -503,8 +599,20 @@ export function ScannerTab({
                     return (
                       <tr
                         key={lead.id}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition"
+                        className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 transition ${
+                          selectedLeadIds.includes(lead.id) ? "bg-blue-50/50 dark:bg-blue-950/20" : ""
+                        }`}
                       >
+                        {/* Checkbox */}
+                        <td className="py-3.5 pl-3 pr-1 text-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${lead.customerName}`}
+                            checked={selectedLeadIds.includes(lead.id)}
+                            onChange={() => handleToggleLead(lead.id)}
+                            className="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                        </td>
                         {/* Customer & Ad Source */}
                         <td className="py-3.5 pl-4 pr-3 min-w-[220px]">
                           <div className="flex items-center space-x-3">
@@ -717,6 +825,50 @@ export function ScannerTab({
           </div>
         )}
       </div>
+
+      {/* Floating Batch Action Toolbar */}
+      {selectedLeadIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 dark:bg-slate-950/95 text-white border border-slate-700/80 rounded-2xl p-3 px-5 shadow-2xl backdrop-blur-md flex flex-wrap items-center gap-3 animate-in slide-in-from-bottom-5">
+          <div className="flex items-center space-x-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+            <span className="text-xs font-bold text-slate-200">
+              <span className="text-blue-400 font-extrabold text-sm">{selectedLeadIds.length}</span> lead{selectedLeadIds.length > 1 ? "s" : ""} selected
+            </span>
+          </div>
+
+          <div className="h-4 w-px bg-slate-700 hidden sm:block" />
+
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={handleSelectEligibleOnly}
+              className="text-[11px] font-semibold text-slate-300 hover:text-white px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition cursor-pointer"
+              title="Select only leads that qualify for follow-up"
+            >
+              Select Inactive Only ({eligibleFilteredLeads.length})
+            </button>
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              className="text-[11px] font-semibold text-slate-400 hover:text-slate-200 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+            >
+              Clear
+            </button>
+          </div>
+
+          {onTriggerBlast && (
+            <button
+              type="button"
+              onClick={handleExecuteSelectedBlast}
+              disabled={isBlasting}
+              className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-blue-600/30 transition disabled:opacity-50 cursor-pointer ml-auto"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>{isBlasting ? "Blasting..." : `Trigger Follow-Up Blast (${selectedLeadIds.length})`}</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { executeFollowUpBlast } from "@/lib/blaster";
+import { requireAdminAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  const unauthorized = await requireAdminAuth(req);
+  if (unauthorized) return unauthorized;
+
   try {
     const body = await req.json();
     const {

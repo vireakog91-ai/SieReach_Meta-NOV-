@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -26,11 +27,47 @@ export async function GET(req: NextRequest) {
 
 /**
  * Facebook Messenger Webhook event receiver (POST)
- * Receives incoming customer messages, postbacks, deliveries
+ * Receives incoming customer messages, postbacks, deliveries.
+ * Validates x-hub-signature-256 with META_APP_SECRET when configured.
  */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const rawBody = await req.text();
+
+    // Verify Meta HMAC-SHA256 signature if App Secret is configured
+    const settingSecret = await prisma.systemSetting.findUnique({
+      where: { key: "META_APP_SECRET" },
+    });
+    const appSecret = settingSecret?.value || process.env.META_APP_SECRET;
+
+    if (appSecret && appSecret.trim()) {
+      const signatureHeader = req.headers.get("x-hub-signature-256");
+      if (!signatureHeader || !signatureHeader.startsWith("sha256=")) {
+        console.warn("Meta Webhook rejected: missing x-hub-signature-256 header");
+        return new NextResponse("Forbidden: Missing Signature", { status: 403 });
+      }
+
+      const receivedSig = signatureHeader.substring(7);
+      const expectedSig = crypto
+        .createHmac("sha256", appSecret.trim())
+        .update(rawBody)
+        .digest("hex");
+
+      try {
+        const isMatch = crypto.timingSafeEqual(
+          Buffer.from(receivedSig, "hex"),
+          Buffer.from(expectedSig, "hex")
+        );
+        if (!isMatch) {
+          console.warn("Meta Webhook rejected: invalid x-hub-signature-256 HMAC");
+          return new NextResponse("Forbidden: Invalid Signature", { status: 403 });
+        }
+      } catch {
+        return new NextResponse("Forbidden: Malformed Signature", { status: 403 });
+      }
+    }
+
+    const body = JSON.parse(rawBody);
 
     if (body.object === "page") {
       for (const entry of body.entry) {

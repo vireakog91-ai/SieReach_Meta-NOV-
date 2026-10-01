@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { fetchFacebookPageProfile } from "@/lib/facebook";
 import { scanInactiveLeads } from "@/lib/scanner";
+import { requireAdminAuth } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const unauthorized = await requireAdminAuth(req);
+  if (unauthorized) return unauthorized;
+
   try {
     const pages = await prisma.facebookPage.findMany({
       include: {
@@ -34,8 +38,16 @@ export async function GET() {
           },
         });
 
+        // Strip and mask raw access token from client response
+        const { accessToken, ...safePage } = page;
+        const maskedToken = accessToken && accessToken.length > 8
+          ? `${accessToken.slice(0, 4)}...${accessToken.slice(-4)}`
+          : (accessToken ? "••••••••" : "");
+
         return {
-          ...page,
+          ...safePage,
+          hasAccessToken: Boolean(accessToken && accessToken.trim()),
+          accessTokenMasked: maskedToken,
           awaitingCount,
           followedUpCount,
         };
@@ -52,9 +64,13 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const unauthorized = await requireAdminAuth(req);
+  if (unauthorized) return unauthorized;
+
   try {
     const body = await req.json();
-    let { pageId, name, category, businessName, avatarUrl, accessToken } = body;
+    const { pageId, businessName, accessToken } = body;
+    let { name, category, avatarUrl } = body;
 
     if (!pageId) {
       return NextResponse.json(
@@ -114,9 +130,21 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const { accessToken: _token, ...safePage } = page;
+    const maskedToken =
+      _token && _token.length > 8
+        ? `${_token.slice(0, 4)}...${_token.slice(-4)}`
+        : _token
+        ? "••••••••"
+        : "";
+
     return NextResponse.json({
       success: true,
-      page,
+      page: {
+        ...safePage,
+        hasAccessToken: Boolean(_token && _token.trim()),
+        accessTokenMasked: maskedToken,
+      },
       profileFetched,
       initialScanSummary,
     });
@@ -129,6 +157,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const unauthorized = await requireAdminAuth(req);
+  if (unauthorized) return unauthorized;
+
   try {
     const body = await req.json();
     const { pageId, isActive, accessToken, name, category, businessName, syncProfile } = body;
@@ -169,7 +200,22 @@ export async function PUT(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ success: true, page: updated });
+    const { accessToken: _token, ...safeUpdated } = updated;
+    const maskedToken =
+      _token && _token.length > 8
+        ? `${_token.slice(0, 4)}...${_token.slice(-4)}`
+        : _token
+        ? "••••••••"
+        : "";
+
+    return NextResponse.json({
+      success: true,
+      page: {
+        ...safeUpdated,
+        hasAccessToken: Boolean(_token && _token.trim()),
+        accessTokenMasked: maskedToken,
+      },
+    });
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err.message },
@@ -179,6 +225,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const unauthorized = await requireAdminAuth(req);
+  if (unauthorized) return unauthorized;
+
   try {
     const { searchParams } = new URL(req.url);
     const pageId = searchParams.get("pageId");

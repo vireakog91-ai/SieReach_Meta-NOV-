@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { executeFollowUpBlast } from "@/lib/blaster";
+import { requireAdminAuth } from "@/lib/auth";
 
 /**
  * Core Auto-Blast Runner Function
@@ -196,6 +197,15 @@ export async function GET(req: NextRequest) {
  * POST Handler - Called by manual trigger or webhook test
  */
 export async function POST(req: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = req.headers.get("authorization");
+  const isCronAuthed = Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
+
+  if (!isCronAuthed) {
+    const unauthorized = await requireAdminAuth(req);
+    if (unauthorized) return unauthorized;
+  }
+
   try {
     const sweepReport = await runAutoBlastSweep();
     return NextResponse.json({

@@ -3,8 +3,12 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+import { requireAdminAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  const unauthorized = await requireAdminAuth(req);
+  if (unauthorized) return unauthorized;
+
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;

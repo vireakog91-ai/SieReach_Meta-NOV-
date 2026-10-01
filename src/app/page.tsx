@@ -1151,8 +1151,8 @@ export default function SieReachDashboard() {
                   Trigger Campaign for Newly Connected Page?
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                  Connected <span className="font-semibold text-slate-900 dark:text-slate-200">"{pageTriggerPrompt.pageName}"</span> ({pageTriggerPrompt.leadCount} conversation{pageTriggerPrompt.leadCount === 1 ? "" : "s"} found). 
-                  Campaign <span className="font-semibold text-blue-600 dark:text-blue-400">"{pageTriggerPrompt.campaignName}"</span> is currently active for <span className="font-semibold">{pageTriggerPrompt.businessName}</span>.
+                  Connected <span className="font-semibold text-slate-900 dark:text-slate-200">&ldquo;{pageTriggerPrompt.pageName}&rdquo;</span> ({pageTriggerPrompt.leadCount} conversation{pageTriggerPrompt.leadCount === 1 ? "" : "s"} found). 
+                  Campaign <span className="font-semibold text-blue-600 dark:text-blue-400">&ldquo;{pageTriggerPrompt.campaignName}&rdquo;</span> is currently active for <span className="font-semibold">{pageTriggerPrompt.businessName}</span>.
                 </p>
               </div>
             </div>

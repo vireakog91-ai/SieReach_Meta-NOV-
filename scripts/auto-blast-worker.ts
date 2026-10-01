@@ -1,5 +1,5 @@
 import { prisma } from "../src/lib/prisma";
-import { executeFollowUpBlast } from "../src/lib/blaster";
+import { runAutoBlastSweep } from "../src/app/api/cron/auto-blast/route";
 
 const SWEEP_INTERVAL_MS = 30_000; // Poll every 30 seconds
 
@@ -8,80 +8,25 @@ async function runSweep() {
   const timeStr = now.toLocaleTimeString();
 
   try {
-    const autoCampaigns = await prisma.followUpCampaign.findMany({
-      where: {
-        autoBlast: true,
-        isActive: true,
-      },
-    });
+    const sweepReport = await runAutoBlastSweep();
 
-    if (autoCampaigns.length === 0) {
-      console.log(`[${timeStr}] [Auto-Blast Daemon] Idle: 0 active auto-blast campaigns.`);
-      return;
-    }
-
-    let totalDelivered = 0;
-
-    for (const campaign of autoCampaigns) {
-      const threshold = campaign.inactiveHoursThreshold;
-
-      const candidateLeads = await prisma.leadConversation.findMany({
-        where: {
-          status: "AWAITING_CUSTOMER",
-          followUpCount: 0,
-          ...(campaign.pageId ? { pageId: campaign.pageId } : {}),
-        },
-        include: { page: true },
-      });
-
-      const eligibleLeads = candidateLeads.filter((lead) => {
-        const agentTime = new Date(lead.lastAgentMessageAt).getTime();
-        const hoursInactive = (now.getTime() - agentTime) / (1000 * 60 * 60);
-        if (hoursInactive < threshold) return false;
-
-        const custTime = new Date(lead.lastCustomerMessageAt).getTime();
-        const hoursSinceCust = (now.getTime() - custTime) / (1000 * 60 * 60);
-
-        if (campaign.excludePast24h && hoursSinceCust > 24.0) return false;
-        if (hoursSinceCust > 168.0) return false;
-
-        return true;
-      });
-
-      if (eligibleLeads.length > 0) {
-        console.log(
-          `[${timeStr}] [Auto-Blast Daemon] Found ${eligibleLeads.length} lead(s) for campaign "${campaign.name}" (Threshold: ${threshold}h). Blasting with drip...`
-        );
-
-        const leadIds = eligibleLeads.map((l) => l.id);
-        const report = await executeFollowUpBlast({
-          campaignId: campaign.id,
-          leadIds,
-          customThresholdHours: threshold,
-          excludePast24h: campaign.excludePast24h,
-          dripMinSeconds: campaign.dripMinSeconds,
-          dripMaxSeconds: campaign.dripMaxSeconds,
-          messageTag: campaign.messageTag || "HUMAN_AGENT",
-        });
-
-        totalDelivered += report.successful;
-        await prisma.followUpCampaign.update({
-          where: { id: campaign.id },
-          data: { lastRunAt: new Date() },
-        });
-
-        for (const item of report.details) {
-          console.log(
-            `  ✓ Dispatched to ${item.customerName} on ${item.pageName} (drip delay: +${item.dripDelayApplied}s)`
-          );
+    if (sweepReport.totalDelivered > 0) {
+      console.log(
+        `[${timeStr}] [Auto-Blast Daemon] Sweep complete: Delivered ${sweepReport.totalDelivered} automated message(s) across ${sweepReport.campaignsChecked} campaign(s).`
+      );
+      for (const res of sweepReport.results) {
+        if (res.delivered > 0) {
+          for (const d of res.dispatchedCustomers || []) {
+            console.log(
+              `  ✓ Dispatched to ${d.name} on ${d.page} (drip delay: +${d.dripDelay}s)`
+            );
+          }
         }
       }
-    }
-
-    if (totalDelivered > 0) {
-      console.log(`[${timeStr}] [Auto-Blast Daemon] Sweep complete: Delivered ${totalDelivered} automated message(s).`);
     } else {
-      console.log(`[${timeStr}] [Auto-Blast Daemon] Sweep complete: Checked ${autoCampaigns.length} campaign(s). No new leads reached threshold.`);
+      console.log(
+        `[${timeStr}] [Auto-Blast Daemon] Idle: Checked ${sweepReport.campaignsChecked} campaign(s). No new leads reached threshold.`
+      );
     }
   } catch (err) {
     console.error(`[${timeStr}] [Auto-Blast Daemon] Error in sweep:`, err);

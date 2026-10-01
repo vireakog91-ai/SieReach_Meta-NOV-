@@ -59,11 +59,11 @@ export function BlastLogsTab({
       {/* Header & Stats */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-white flex items-center space-x-2">
-            <History className="w-5 h-5 text-emerald-400" />
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center space-x-2">
+            <History className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             <span>Follow-Up Blast Delivery Logs</span>
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Real-time audit log of all automated and manual follow-up messages and images sent to customers.
           </p>
         </div>

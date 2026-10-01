@@ -31,3 +31,32 @@ export async function verifyAdminToken(token?: string | null): Promise<boolean> 
     return false;
   }
 }
+
+/**
+ * Validates admin authentication on incoming NextRequest.
+ * Checks both HttpOnly cookie and Authorization Bearer header.
+ * Returns null if valid, or a 401 NextResponse if unauthorized.
+ */
+export async function requireAdminAuth(req: {
+  cookies: { get: (name: string) => { value: string } | undefined };
+  headers: { get: (name: string) => string | null };
+}): Promise<Response | null> {
+  const cookieToken = req.cookies.get(COOKIE_NAME)?.value;
+  const authHeader = req.headers.get("authorization");
+  const bearerToken = authHeader?.startsWith("Bearer ")
+    ? authHeader.substring(7).trim()
+    : null;
+
+  const token = cookieToken || bearerToken;
+  const isValid = await verifyAdminToken(token);
+
+  if (!isValid) {
+    return Response.json(
+      { success: false, error: "Unauthorized: Admin authentication required." },
+      { status: 401 }
+    );
+  }
+
+  return null;
+}
+

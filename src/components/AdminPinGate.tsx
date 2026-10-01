@@ -150,7 +150,7 @@ export function AdminPinGate({ onAuthenticated }: AdminPinGateProps) {
             <span>Encrypted Session (7-Day Token)</span>
           </div>
           <p className="text-[10px] text-slate-500">
-            Default initial passcode: <span className="font-mono text-slate-400 font-bold">sielab2026</span>
+            Protected by SieReach Security Gateway · Authorized Personnel Only
           </p>
         </div>
       </div>

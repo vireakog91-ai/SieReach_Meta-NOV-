@@ -21,24 +21,9 @@ export interface SendMessageResult {
   mode: "LIVE" | "SANDBOX";
 }
 
-/**
- * Resolves spintax strings in the format {option1|option2|option3}.
- * Recursively resolves nested spintax like {Hello|Hi {there|friend}}!
- */
-export function parseSpintax(text: string): string {
-  if (!text) return "";
-  const spintaxRegex = /\{([^{}]+)\}/;
-  let matches;
-  let resolved = text;
-  let iterations = 0;
-  while ((matches = spintaxRegex.exec(resolved)) !== null && iterations < 50) {
-    const options = matches[1].split("|");
-    const choice = options[Math.floor(Math.random() * options.length)];
-    resolved = resolved.replace(matches[0], choice);
-    iterations++;
-  }
-  return resolved;
-}
+import { parseSpintax } from "./spintax";
+export { parseSpintax };
+
 
 /**
  * Replace placeholders in follow-up message templates and resolves Spintax variations
