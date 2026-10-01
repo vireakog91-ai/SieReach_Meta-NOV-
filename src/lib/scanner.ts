@@ -52,11 +52,11 @@ async function syncLiveConversations(pageIdFilter?: string | null) {
       },
     });
 
-    // Smart 36-Hour Lookback Window Cutoff:
-    // Captures 100% of leads within the 24H window + 12h grace buffer.
-    // Early-exits as soon as conversations become older than 36h to avoid querying dead historical data.
+    // Smart 60-Hour Lookback Window Cutoff:
+    // Captures active conversations within the 24H window + extended recovery buffer up to 60h.
+    // Early-exits as soon as conversations become older than 60h to avoid querying dead historical data.
     const nowMs = Date.now();
-    const maxLookbackMs = 36 * 60 * 60 * 1000;
+    const maxLookbackMs = 60 * 60 * 60 * 1000;
     const cutoffTimestamp = nowMs - maxLookbackMs;
 
     for (const page of pages) {
@@ -249,17 +249,25 @@ export async function scanInactiveLeads(
   }
 
   const now = new Date();
+  const maxSilentHours = 60.0;
+  const cutoffDate = new Date(now.getTime() - maxSilentHours * 60 * 60 * 1000);
 
-  // Fetch leads with their corresponding page
+  // Fetch leads with their corresponding page.
+  // 60-Hour Maximum Silence Rule:
+  // If the customer has been silent for more than 60 hours, they are excluded from the recovery dashboard.
   const leads = await prisma.leadConversation.findMany({
     where: {
       ...(pageIdFilter ? { pageId: pageIdFilter } : {}),
+      OR: [
+        { lastCustomerMessageAt: { gte: cutoffDate } },
+        { lastAgentMessageAt: { gte: cutoffDate } },
+      ],
     },
     include: {
       page: true,
     },
     orderBy: {
-      lastAgentMessageAt: "asc", // longest waiting first
+      lastAgentMessageAt: "desc", // Newest conversations first
     },
   });
 
@@ -273,7 +281,9 @@ export async function scanInactiveLeads(
   let expired24hCount = 0;
   let followedUpCount = 0;
 
-  const analyzedLeads: AnalyzedLead[] = leads.map((lead) => {
+  const analyzedLeads: AnalyzedLead[] = [];
+
+  for (const lead of leads) {
     const custTime = new Date(lead.lastCustomerMessageAt).getTime();
     const agentTime = new Date(lead.lastAgentMessageAt).getTime();
     const currentTime = now.getTime();
@@ -281,9 +291,14 @@ export async function scanInactiveLeads(
     // Elapsed hours
     const hoursSinceCustomer = Math.max(0, (currentTime - custTime) / (1000 * 60 * 60));
     const hoursSinceAgent = Math.max(0, (currentTime - agentTime) / (1000 * 60 * 60));
-    
+
     // Unresponsive duration is the time elapsed since the sales rep replied and customer stayed quiet
     const hoursUnresponsive = hoursSinceAgent;
+
+    // 60-Hour Dashboard Cutoff: If customer has been silent for more than 60 hours, exclude from dashboard
+    if (hoursUnresponsive > maxSilentHours) {
+      continue;
+    }
 
     // 24h Meta Window checks
     const within24h = hoursSinceCustomer <= 24.0;
@@ -313,7 +328,7 @@ export async function scanInactiveLeads(
     // Lead is eligible if they haven't replied, exceed threshold, and are still AWAITING_CUSTOMER
     const isEligibleForFollowUp = isAwaiting && isOverThreshold;
 
-    return {
+    analyzedLeads.push({
       id: lead.id,
       pageId: lead.pageId,
       pageName: lead.page.name,
@@ -343,12 +358,12 @@ export async function scanInactiveLeads(
       windowRemainingHours: Number(windowRemainingHours.toFixed(1)),
       isEligibleForFollowUp,
       policyStatus,
-    };
-  });
+    });
+  }
 
   return {
     totalPages,
-    totalLeads: leads.length,
+    totalLeads: analyzedLeads.length,
     awaitingCustomer,
     unresponsiveCount,
     urgent24hCount,

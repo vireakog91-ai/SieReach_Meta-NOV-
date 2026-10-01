@@ -254,9 +254,11 @@ export default function SieReachDashboard() {
     return new Set(scopedPages.map((p) => p.pageId));
   }, [scopedPages]);
 
-  // Scoped Scanner Leads & Metrics ("Zero Mix-Up" Isolation)
+  // Scoped Scanner Leads & Metrics ("Zero Mix-Up" Isolation & 60H Active Window)
   const scopedScannerSummary: ScannerSummary = React.useMemo(() => {
-    let filtered = scannerData.leads.filter((l) => scopedPageIds.has(l.pageId));
+    let filtered = scannerData.leads.filter(
+      (l) => scopedPageIds.has(l.pageId) && (l.hoursUnresponsive ?? 0) <= 60.0
+    );
     if (selectedPageId !== "ALL") {
       filtered = filtered.filter((l) => l.pageId === selectedPageId);
     }

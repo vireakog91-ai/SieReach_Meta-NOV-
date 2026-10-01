@@ -43,6 +43,39 @@ function getBusinessBadgeInfo(businessName?: string) {
   return { bName, icon, colorClasses };
 }
 
+function SafeAvatar({
+  src,
+  alt,
+  fallbackText,
+  className,
+  fallbackClassName,
+}: {
+  src?: string | null;
+  alt: string;
+  fallbackText: string;
+  className: string;
+  fallbackClassName: string;
+}) {
+  const [hasError, setHasError] = useState(false);
+
+  if (!src || hasError) {
+    return (
+      <div className={fallbackClassName} title={alt}>
+        {fallbackText}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={() => setHasError(true)}
+    />
+  );
+}
+
 export function ScannerTab({
   leads,
   thresholdHours = 24.0,
@@ -58,21 +91,27 @@ export function ScannerTab({
   const [viewMode, setViewMode] = useState<"compact" | "standard">("compact");
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
 
+  // 60-Hour Maximum Silence Rule:
+  // Customers silent for more than 60 hours are excluded from the active recovery dashboard.
+  const activeLeads = leads.filter((l) => (l.hoursUnresponsive ?? 0) <= 60.0);
 
-  // Metrics
-  const active24hCount = leads.filter(
+  // Metrics (computed strictly from active window leads <= 60h)
+  const active24hCount = activeLeads.filter(
     (l) => l.within24h && l.hoursSinceCustomer <= 24
   ).length;
-  const unresponsiveActiveCount = leads.filter(
+  const unresponsiveActiveCount = activeLeads.filter(
     (l) => l.status === "AWAITING_CUSTOMER" && l.within24h && l.hoursSinceCustomer <= 24
   ).length;
-  const expiredCount = leads.filter(
-    (l) => !l.within24h || l.hoursSinceCustomer > 24
+  const expiredCount = activeLeads.filter(
+    (l) => (!l.within24h || l.hoursSinceCustomer > 24) && (l.hoursUnresponsive ?? 0) <= 60
   ).length;
-  const followedUpCount = leads.filter((l) => l.status === "FOLLOWED_UP").length;
+  const followedUpCount = activeLeads.filter((l) => l.status === "FOLLOWED_UP").length;
 
   // Filter leads
-  const filteredLeads = leads.filter((lead) => {
+  const filteredLeads = activeLeads.filter((lead) => {
+    // 60-Hour Maximum Silence Guard
+    if (lead.hoursUnresponsive > 60.0) return false;
+
     const matchesSearch =
       lead.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       lead.pageName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -284,6 +323,15 @@ export function ScannerTab({
                 </select>
               </div>
             )}
+
+            {/* 60H Active Recovery Window Badge */}
+            <div
+              className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-[11px] text-slate-600 dark:text-slate-400 font-medium shrink-0"
+              title="Only leads active within the last 60 hours are displayed on the dashboard. Leads with >60h silence are automatically excluded from the recovery queue."
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              <span>Max Window: <strong className="text-slate-900 dark:text-white font-semibold">60h</strong></span>
+            </div>
           </div>
 
           {/* Action buttons */}
@@ -399,13 +447,15 @@ export function ScannerTab({
                         {/* 1. Customer & Ad Campaign */}
                         <td className="py-2.5 pl-4 pr-2">
                           <div className="flex items-center space-x-2.5 min-w-0">
-                            <img
+                            <SafeAvatar
                               src={
                                 lead.customerAvatar ||
                                 "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"
                               }
                               alt={lead.customerName}
+                              fallbackText={lead.customerName.slice(0, 1).toUpperCase()}
                               className="w-7 h-7 rounded-full object-cover ring-1 ring-slate-200 dark:ring-slate-700 shrink-0"
+                              fallbackClassName="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 ring-1 ring-slate-200 dark:ring-slate-700 flex items-center justify-center text-xs font-bold shrink-0"
                             />
                             <div className="min-w-0 flex-1">
                               <div
@@ -429,17 +479,13 @@ export function ScannerTab({
                         {/* 2. Facebook Business Page */}
                         <td className="py-2.5 px-2">
                           <div className="flex items-center space-x-2 min-w-0">
-                            {lead.pageAvatar ? (
-                              <img
-                                src={lead.pageAvatar}
-                                alt={lead.pageName}
-                                className="w-6 h-6 rounded-md object-cover ring-1 ring-slate-200 dark:ring-slate-700 shrink-0"
-                              />
-                            ) : (
-                              <div className="w-6 h-6 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center text-[10px] font-bold shrink-0">
-                                {lead.pageName.charAt(0)}
-                              </div>
-                            )}
+                            <SafeAvatar
+                              src={lead.pageAvatar}
+                              alt={lead.pageName}
+                              fallbackText={lead.pageName.slice(0, 1).toUpperCase()}
+                              className="w-6 h-6 rounded-md object-cover ring-1 ring-slate-200 dark:ring-slate-700 shrink-0"
+                              fallbackClassName="w-6 h-6 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center text-[10px] font-bold shrink-0"
+                            />
                             <div className="min-w-0 flex-1">
                               <div
                                 className="font-semibold text-slate-900 dark:text-white text-xs truncate"
@@ -651,13 +697,15 @@ export function ScannerTab({
                         {/* Customer & Ad Source */}
                         <td className="py-3.5 pl-4 pr-3 min-w-[220px]">
                           <div className="flex items-center space-x-3">
-                            <img
+                            <SafeAvatar
                               src={
                                 lead.customerAvatar ||
                                 "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"
                               }
                               alt={lead.customerName}
+                              fallbackText={lead.customerName.slice(0, 1).toUpperCase()}
                               className="w-9 h-9 rounded-full object-cover ring-1 ring-slate-200 dark:ring-slate-700 shrink-0"
+                              fallbackClassName="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 ring-1 ring-slate-200 dark:ring-slate-700 flex items-center justify-center text-xs font-bold shrink-0"
                             />
                             <div className="min-w-0">
                               <div className="font-bold text-slate-900 dark:text-white text-xs leading-tight">
@@ -678,17 +726,13 @@ export function ScannerTab({
                         {/* Connected Facebook Page */}
                         <td className="py-3.5 px-3 min-w-[210px]">
                           <div className="flex items-center space-x-2.5">
-                            {lead.pageAvatar ? (
-                              <img
-                                src={lead.pageAvatar}
-                                alt={lead.pageName}
-                                className="w-8 h-8 rounded-lg object-cover ring-1 ring-slate-200 dark:ring-slate-700 shrink-0"
-                              />
-                            ) : (
-                              <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center text-xs font-bold shrink-0">
-                                {lead.pageName.charAt(0)}
-                              </div>
-                            )}
+                            <SafeAvatar
+                              src={lead.pageAvatar}
+                              alt={lead.pageName}
+                              fallbackText={lead.pageName.slice(0, 1).toUpperCase()}
+                              className="w-8 h-8 rounded-lg object-cover ring-1 ring-slate-200 dark:ring-slate-700 shrink-0"
+                              fallbackClassName="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center text-xs font-bold shrink-0"
+                            />
                             <div className="min-w-0 flex-1">
                               <div
                                 className="font-semibold text-slate-900 dark:text-white text-xs truncate max-w-[170px]"
