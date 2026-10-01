@@ -658,13 +658,17 @@ export function BotSetupTab({
         step2CampaignId: step2CampaignId || null,
         step2MessageTemplate: step2MessageTemplate || null,
         step2ImageUrl: step2ImageUrl || null,
-        isActive: false, // Save as Draft - Never auto-executes upon save
+        isActive: selectedId === "new" ? false : Boolean(isActive),
       });
 
       if (saved?.id) {
         setSelectedId(saved.id);
       }
-      setIsActive(false);
+      const finalActive = selectedId === "new" ? false : Boolean(isActive);
+      setIsActive(finalActive);
+      if (finalActive && autoBlast) {
+        handleTriggerAutoCheck();
+      }
       // Update baseline to reflect saved state
       setSavedBaseline({
         name,

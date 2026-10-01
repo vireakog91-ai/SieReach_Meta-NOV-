@@ -143,6 +143,17 @@ export default function SieReachDashboard() {
   const [lastDataSyncTime, setLastDataSyncTime] = useState<Date | null>(null);
   const [, setSyncTick] = useState(0);
 
+  // Scheduled Synchronization & Auto-Pilot Engine Settings
+  // Schedule presets: 15s, 30s (default), 60s, or 0 (Manual / Paused)
+  const [syncScheduleSeconds, setSyncScheduleSeconds] = useState<number>(30);
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(30);
+  const [isAutoSyncing, setIsAutoSyncing] = useState(false);
+  const [autoPilotStatus, setAutoPilotStatus] = useState<{
+    lastDelivered: number;
+    lastCheckedAt: Date | null;
+    message: string | null;
+  } | null>(null);
+
   useEffect(() => {
     const timer = setInterval(() => setSyncTick((t) => t + 1), 10_000);
     return () => clearInterval(timer);
@@ -275,6 +286,10 @@ export default function SieReachDashboard() {
     return filtered;
   }, [campaigns, selectedBusiness, selectedPageId]);
 
+  const hasActiveAutoBlast = React.useMemo(() => {
+    return campaigns.some((c) => c.autoBlast && c.isActive);
+  }, [campaigns]);
+
   // Scoped Logs
   const scopedLogs = React.useMemo(() => {
     let filtered = logs.filter((l) => scopedPageIds.has(l.pageId));
@@ -306,35 +321,115 @@ export default function SieReachDashboard() {
     }
   }, [scopedPages, selectedPageId]);
 
-  // Recurring Background Auto-Blast Poller (Every 30 seconds)
-  useEffect(() => {
-    const hasAutoBlast = campaigns.some((c) => c.autoBlast && c.isActive);
-    if (!hasAutoBlast) return;
+  const isSyncInProgressRef = React.useRef(false);
 
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch("/api/cron/auto-blast");
+  // Unified Scheduled Background Synchronization & Auto-Pilot Sweep
+  const runScheduledSync = useCallback(async () => {
+    if (isSyncInProgressRef.current) return;
+    isSyncInProgressRef.current = true;
+    setIsAutoSyncing(true);
+
+    try {
+      // 1. Silently refresh live data
+      await fetchData();
+
+      // 2. If any campaign has active auto-blast configured, run the auto-pilot sweep
+      const hasAutoBlast = campaigns.some((c) => c.autoBlast && c.isActive);
+      if (hasAutoBlast) {
+        const res = await fetch("/api/cron/auto-blast", { method: "POST" });
         const json = await res.json();
-        if (json.success && json.data?.totalDelivered > 0) {
-          // If automated messages were dispatched, refresh dashboard data
-          fetchData();
-        }
-      } catch (err) {
-        console.error("Auto-blast poller error:", err);
-      }
-    }, 30_000);
+        if (json.success && json.data) {
+          const delivered = json.data.totalDelivered || 0;
+          setAutoPilotStatus({
+            lastDelivered: delivered,
+            lastCheckedAt: new Date(),
+            message:
+              delivered > 0
+                ? `Dispatched ${delivered} message(s)`
+                : `Checked ${json.data.campaignsChecked} rule(s) • 0 new eligible`,
+          });
 
-    return () => clearInterval(interval);
+          if (delivered > 0) {
+            // Re-fetch to update followed-up statuses, charts, and blast logs
+            await fetchData();
+            setBlastFeedback({
+              show: true,
+              title: "⚡ Auto-Pilot Dispatched Follow-Ups",
+              message: `Delivered ${delivered} automated follow-up message(s) for active campaign(s).`,
+              count: delivered,
+            });
+            setTimeout(() => setBlastFeedback(null), 5000);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Scheduled sync error:", err);
+    } finally {
+      setIsAutoSyncing(false);
+      isSyncInProgressRef.current = false;
+      setLastDataSyncTime(new Date());
+    }
   }, [campaigns, fetchData]);
 
-  // Handler: Re-scan (Full Meta Graph API Crawl)
+  // Scheduled 1-second Countdown Ticker
+  useEffect(() => {
+    if (syncScheduleSeconds === 0) return; // Paused
+
+    const timer = setInterval(() => {
+      setCountdownSeconds((prev) => {
+        if (prev <= 1) {
+          runScheduledSync();
+          return syncScheduleSeconds;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [syncScheduleSeconds, runScheduledSync]);
+
+  const handleSelectSyncSchedule = (newSeconds: number) => {
+    setSyncScheduleSeconds(newSeconds);
+    setCountdownSeconds(newSeconds > 0 ? newSeconds : 0);
+  };
+
+  const handleManualSyncNow = () => {
+    runScheduledSync();
+    setCountdownSeconds(syncScheduleSeconds > 0 ? syncScheduleSeconds : 0);
+  };
+
+  // Handler: Re-scan (Meta Graph API Crawl with Visual Feedback)
   const handleRefreshScan = async () => {
     setIsScanning(true);
     try {
-      await fetch("/api/leads/scan", { method: "POST" });
+      const res = await fetch("/api/leads/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageId: selectedPageId !== "ALL" ? selectedPageId : undefined,
+          thresholdHours,
+        }),
+      });
+      const data = await res.json();
       await fetchData();
-    } catch (err) {
+      if (data.success) {
+        setBlastFeedback({
+          show: true,
+          title: "Meta Scan Complete!",
+          message: data.message || "Scanned active conversations and updated inactivity timers.",
+          count: 0,
+        });
+        setTimeout(() => setBlastFeedback(null), 4000);
+      }
+    } catch (err: any) {
       console.error("Scan error:", err);
+      setBlastFeedback({
+        show: true,
+        title: "Scan Notice",
+        message: err.message || "Failed to scan Meta Graph API.",
+        count: 0,
+      });
+      setTimeout(() => setBlastFeedback(null), 4000);
     } finally {
       setIsScanning(false);
     }
@@ -892,15 +987,30 @@ export default function SieReachDashboard() {
             </div>
           </div>
 
-          {selectedPageId !== "ALL" && (
-            <button
-              onClick={() => setSelectedPageId("ALL")}
-              className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 shrink-0 cursor-pointer ml-auto font-medium"
-            >
-              <span>Reset Page Filter</span>
-              <span className="text-xs">✕</span>
-            </button>
-          )}
+          <div className="flex items-center space-x-2 shrink-0 ml-auto">
+            {hasActiveAutoBlast && (
+              <div
+                className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold"
+                title={`Auto-Pilot background blast engine is active. Next sweep in ${countdownSeconds}s.`}
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span>Auto-Pilot: {syncScheduleSeconds > 0 ? `${countdownSeconds}s` : "Paused"}</span>
+              </div>
+            )}
+
+            {selectedPageId !== "ALL" && (
+              <button
+                onClick={() => setSelectedPageId("ALL")}
+                className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 shrink-0 cursor-pointer font-medium"
+              >
+                <span>Reset Page Filter</span>
+                <span className="text-xs">✕</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Dashboard Top Overview Stats */}
@@ -1075,19 +1185,83 @@ export default function SieReachDashboard() {
             </span>
           </div>
 
-          {/* Center: Live Data Synchronization Status Badge */}
-          <div className="flex items-center space-x-2">
+          {/* Center: Live Data Synchronization & Scheduled Auto-Pilot Engine Controls */}
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {/* Sync Now & Last Synced Button */}
             <button
-              onClick={() => fetchData()}
-              disabled={isLoading || isScanning}
+              onClick={handleManualSyncNow}
+              disabled={isLoading || isScanning || isAutoSyncing}
               className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 flex items-center space-x-2 transition shadow-2xs group cursor-pointer disabled:opacity-60"
-              title="Click to refresh live lead data from Meta"
+              title="Click to sync data from Meta immediately"
             >
-              <RefreshCw className={`w-3 h-3 text-blue-500 transition-transform ${isLoading || isScanning ? "animate-spin" : "group-hover:rotate-180"}`} />
+              <RefreshCw
+                className={`w-3 h-3 text-blue-500 transition-transform ${
+                  isLoading || isScanning || isAutoSyncing ? "animate-spin" : "group-hover:rotate-180"
+                }`}
+              />
               <span className="text-[11px] font-medium">
-                Last synced: <span className="font-semibold text-slate-900 dark:text-white">{getRelativeSyncTime(lastDataSyncTime)}</span>
+                {isAutoSyncing ? "Syncing..." : `Synced: ${getRelativeSyncTime(lastDataSyncTime)}`}
               </span>
             </button>
+
+            {/* Scheduled Synchronization Interval Ticker & Switcher */}
+            <div className="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full px-2 py-0.5 text-[11px]">
+              <div className="flex items-center space-x-1.5 pr-1.5 border-r border-slate-200 dark:border-slate-800">
+                {syncScheduleSeconds > 0 ? (
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                ) : (
+                  <span className="inline-flex rounded-full h-2 w-2 bg-slate-400 dark:bg-slate-600"></span>
+                )}
+                <span className="font-mono text-slate-700 dark:text-slate-300 font-semibold">
+                  {syncScheduleSeconds > 0 ? `${countdownSeconds}s` : "Paused"}
+                </span>
+              </div>
+
+              {/* Schedule presets */}
+              <div className="flex items-center space-x-0.5">
+                {[15, 30, 60].map((sec) => (
+                  <button
+                    key={sec}
+                    onClick={() => handleSelectSyncSchedule(sec)}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition cursor-pointer ${
+                      syncScheduleSeconds === sec
+                        ? "bg-blue-600 text-white font-bold"
+                        : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
+                    }`}
+                    title={`Synchronize every ${sec} seconds`}
+                  >
+                    {sec}s
+                  </button>
+                ))}
+                <button
+                  onClick={() => handleSelectSyncSchedule(0)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] transition cursor-pointer ${
+                    syncScheduleSeconds === 0
+                      ? "bg-amber-600 text-white font-bold"
+                      : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
+                  }`}
+                  title="Pause automatic background synchronization"
+                >
+                  Pause
+                </button>
+              </div>
+            </div>
+
+            {/* Auto-Pilot Active Badge in Footer */}
+            {hasActiveAutoBlast && (
+              <div className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                <span>Auto-Pilot ({syncScheduleSeconds > 0 ? `${syncScheduleSeconds}s` : "Manual"})</span>
+                {autoPilotStatus?.message && (
+                  <span className="text-slate-500 dark:text-slate-400 font-normal border-l border-emerald-300 dark:border-emerald-700 pl-1.5 max-w-[170px] truncate hidden md:inline">
+                    {autoPilotStatus.message}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right: Meta Graph API & Health Indicators */}

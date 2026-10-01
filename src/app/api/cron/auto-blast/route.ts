@@ -166,19 +166,16 @@ export async function runAutoBlastSweep() {
  * GET Handler - Called by cron triggers, background timers, or health monitors
  */
 export async function GET(req: NextRequest) {
-  try {
-    // Vercel Cron automatically sends Authorization: Bearer <CRON_SECRET>
-    const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret) {
-      const authHeader = req.headers.get("authorization");
-      if (authHeader !== `Bearer ${cronSecret}`) {
-        return NextResponse.json(
-          { success: false, error: "Unauthorized: Invalid CRON_SECRET" },
-          { status: 401 }
-        );
-      }
-    }
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = req.headers.get("authorization");
+  const isCronAuthed = Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
 
+  if (!isCronAuthed) {
+    const unauthorized = await requireAdminAuth(req);
+    if (unauthorized) return unauthorized;
+  }
+
+  try {
     const sweepReport = await runAutoBlastSweep();
     return NextResponse.json({
       success: true,

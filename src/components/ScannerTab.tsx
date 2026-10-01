@@ -294,14 +294,49 @@ export function ScannerTab({
               className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl text-xs font-semibold shadow-sm shadow-blue-600/20 transition disabled:opacity-50 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? "animate-spin" : ""}`} />
-              <span>{isScanning ? "Scanning..." : "Rescan Pages"}</span>
+              <span>{isScanning ? "Scanning Meta API..." : "Rescan Pages"}</span>
             </button>
           </div>
         </div>
       </div>
 
+      {/* Active Scan Visual Indicator Banner */}
+      {isScanning && (
+        <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-blue-500/10 border border-blue-500/30 dark:border-blue-500/40 rounded-2xl p-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center space-x-3 min-w-0">
+              <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-blue-600/15 text-blue-600 dark:text-blue-400 shrink-0">
+                <span className="absolute w-full h-full rounded-xl bg-blue-500/20 animate-ping" />
+                <RefreshCw className="w-5 h-5 animate-spin text-blue-600 dark:text-blue-400 relative z-10" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center space-x-2">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Crawling Meta Graph API & Evaluating Inactivity Timers...
+                  </h4>
+                  <span className="text-[10px] bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-mono font-semibold px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
+                    Live Crawl
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 truncate">
+                  Querying active Messenger conversations, reading customer messages & re-evaluating 24h follow-up deadlines...
+                </p>
+              </div>
+            </div>
+            <div className="hidden sm:flex flex-col items-end shrink-0 text-right">
+              <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">Processing live threads</span>
+              <span className="text-[10px] text-slate-400 font-mono">Usually takes 3–10s</span>
+            </div>
+          </div>
+          {/* Animated shimmer progress bar */}
+          <div className="w-full bg-blue-200/60 dark:bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-blue-500 via-indigo-400 to-blue-600 rounded-full animate-pulse w-full" />
+          </div>
+        </div>
+      )}
+
       {/* Leads Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+      <div className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm transition-all duration-300 ${isScanning ? "opacity-60 ring-2 ring-blue-500/30" : ""}`}>
         {viewMode === "compact" ? (
           /* =========================================================================
              COMPACT VIEW (All 4 Columns Visible Without Scrolling)
