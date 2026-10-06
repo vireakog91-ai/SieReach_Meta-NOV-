@@ -72,6 +72,11 @@ export async function POST(req: NextRequest) {
       step2CampaignId,
       step2MessageTemplate,
       step2ImageUrl,
+      audioUrl,
+      audioUrls,
+      enableAudioSpin,
+      mediaType,
+      step2AudioUrl,
       isActive,
     } = body;
 
@@ -102,6 +107,10 @@ export async function POST(req: NextRequest) {
         imageUrl: imageUrl || null,
         imageUrls: imageUrls ? (typeof imageUrls === "string" ? imageUrls : JSON.stringify(imageUrls)) : null,
         enableImageSpin: Boolean(enableImageSpin),
+        audioUrl: audioUrl || null,
+        audioUrls: audioUrls ? (typeof audioUrls === "string" ? audioUrls : JSON.stringify(audioUrls)) : null,
+        enableAudioSpin: Boolean(enableAudioSpin),
+        mediaType: mediaType || "IMAGE",
         messageTag: messageTag || "HUMAN_AGENT",
         autoBlast: Boolean(autoBlast),
         excludePast24h: excludePast24h !== undefined ? Boolean(excludePast24h) : true,
@@ -112,6 +121,7 @@ export async function POST(req: NextRequest) {
         step2CampaignId: step2CampaignId || null,
         step2MessageTemplate: step2MessageTemplate || null,
         step2ImageUrl: step2ImageUrl || null,
+        step2AudioUrl: step2AudioUrl || null,
         isActive: isActive !== undefined ? Boolean(isActive) : false,
       },
     });
@@ -151,6 +161,11 @@ export async function PUT(req: NextRequest) {
       step2CampaignId,
       step2MessageTemplate,
       step2ImageUrl,
+      audioUrl,
+      audioUrls,
+      enableAudioSpin,
+      mediaType,
+      step2AudioUrl,
       isActive,
     } = body;
 
@@ -180,6 +195,12 @@ export async function PUT(req: NextRequest) {
           ? { imageUrls: imageUrls ? (typeof imageUrls === "string" ? imageUrls : JSON.stringify(imageUrls)) : null }
           : {}),
         ...(enableImageSpin !== undefined ? { enableImageSpin: Boolean(enableImageSpin) } : {}),
+        ...(audioUrl !== undefined ? { audioUrl: audioUrl || null } : {}),
+        ...(audioUrls !== undefined
+          ? { audioUrls: audioUrls ? (typeof audioUrls === "string" ? audioUrls : JSON.stringify(audioUrls)) : null }
+          : {}),
+        ...(enableAudioSpin !== undefined ? { enableAudioSpin: Boolean(enableAudioSpin) } : {}),
+        ...(mediaType !== undefined ? { mediaType } : {}),
         ...(messageTag !== undefined ? { messageTag } : {}),
         ...(autoBlast !== undefined ? { autoBlast: Boolean(autoBlast) } : {}),
         ...(excludePast24h !== undefined ? { excludePast24h: Boolean(excludePast24h) } : {}),
@@ -198,6 +219,7 @@ export async function PUT(req: NextRequest) {
         ...(step2CampaignId !== undefined ? { step2CampaignId: step2CampaignId || null } : {}),
         ...(step2MessageTemplate !== undefined ? { step2MessageTemplate: step2MessageTemplate || null } : {}),
         ...(step2ImageUrl !== undefined ? { step2ImageUrl: step2ImageUrl || null } : {}),
+        ...(step2AudioUrl !== undefined ? { step2AudioUrl: step2AudioUrl || null } : {}),
         ...(isActive !== undefined ? { isActive: Boolean(isActive) } : {}),
       },
     });

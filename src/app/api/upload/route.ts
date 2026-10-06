@@ -33,13 +33,18 @@ export async function POST(req: NextRequest) {
     }
 
     // Determine media type
-    let detectedType: "photo" | "video" | "document" = "document";
+    let detectedType: "photo" | "video" | "audio" | "document" = "document";
     const mime = file.type.toLowerCase();
     const originalExt = path.extname(file.name).toLowerCase();
 
     if (mime.startsWith("image/") || [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"].includes(originalExt)) {
       detectedType = "photo";
-    } else if (mime.startsWith("video/") || [".mp4", ".mov", ".webm", ".mkv", ".avi"].includes(originalExt)) {
+    } else if (
+      mime.startsWith("audio/") ||
+      [".mp3", ".wav", ".m4a", ".aac", ".ogg", ".webm", ".opus", ".flac"].includes(originalExt)
+    ) {
+      detectedType = "audio";
+    } else if (mime.startsWith("video/") || [".mp4", ".mov", ".mkv", ".avi"].includes(originalExt)) {
       detectedType = "video";
     } else {
       detectedType = "document";
@@ -54,7 +59,13 @@ export async function POST(req: NextRequest) {
       .replace(/[^a-zA-Z0-9_-]/g, "_")
       .slice(0, 30);
     const uniqueSuffix = crypto.randomBytes(4).toString("hex");
-    const uniqueName = `${detectedType}_${Date.now()}_${safeBase}_${uniqueSuffix}${originalExt || ".jpg"}`;
+    const defaultExt =
+      detectedType === "audio"
+        ? (mime.includes("webm") ? ".webm" : mime.includes("mp4") || mime.includes("m4a") ? ".m4a" : ".mp3")
+        : (detectedType === "photo" ? ".jpg" : ".bin");
+    const uniqueName = `${detectedType}_${Date.now()}_${safeBase}_${uniqueSuffix}${originalExt || defaultExt}`;
+
+    const defaultMime = detectedType === "audio" ? "audio/mpeg" : (detectedType === "photo" ? "image/jpeg" : "application/octet-stream");
 
     // 1. Store in Database for 100% reliability on Vercel Serverless
     try {
@@ -62,12 +73,12 @@ export async function POST(req: NextRequest) {
         where: { key: `upload_${uniqueName}` },
         update: {
           value: buffer.toString("base64"),
-          description: mime || "image/jpeg",
+          description: mime || defaultMime,
         },
         create: {
           key: `upload_${uniqueName}`,
           value: buffer.toString("base64"),
-          description: mime || "image/jpeg",
+          description: mime || defaultMime,
         },
       });
     } catch (dbErr) {

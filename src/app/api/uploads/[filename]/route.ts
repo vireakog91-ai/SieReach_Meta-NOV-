@@ -25,8 +25,16 @@ export async function GET(
         ".webp": "image/webp",
         ".gif": "image/gif",
         ".svg": "image/svg+xml",
+        ".mp3": "audio/mpeg",
+        ".m4a": "audio/mp4",
+        ".wav": "audio/wav",
+        ".ogg": "audio/ogg",
+        ".webm": "audio/webm",
+        ".aac": "audio/aac",
+        ".opus": "audio/opus",
+        ".flac": "audio/flac",
       };
-      const contentType = mimeTypes[ext] || "image/jpeg";
+      const contentType = mimeTypes[ext] || "application/octet-stream";
 
       return new NextResponse(buffer, {
         status: 200,

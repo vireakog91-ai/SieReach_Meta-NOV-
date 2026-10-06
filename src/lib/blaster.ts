@@ -6,6 +6,7 @@ export interface BlastRequest {
   leadIds?: string[];
   customMessageTemplate?: string;
   customImageUrl?: string;
+  customAudioUrl?: string;
   customThresholdHours?: number;
   messageTag?: string;
   targetPageId?: string;
@@ -27,6 +28,8 @@ export interface BlastResultItem {
   error?: string;
   dripDelayApplied?: number;
   messageSent?: string;
+  imageUrl?: string | null;
+  audioUrl?: string | null;
   step?: number;
 }
 
@@ -53,6 +56,7 @@ export async function executeFollowUpBlast(
     leadIds,
     customMessageTemplate,
     customImageUrl,
+    customAudioUrl,
     customThresholdHours,
     messageTag = "HUMAN_AGENT",
     targetPageId,
@@ -74,6 +78,7 @@ export async function executeFollowUpBlast(
     "Hello {{customer_name}}, just following up regarding your interest in {{page_name}}! We are here to help answer any questions or prepare your order.";
 
   const imageToUse = customImageUrl ?? campaign?.imageUrl ?? null;
+  const audioToUse = customAudioUrl ?? campaign?.audioUrl ?? null;
   const tagToUse = messageTag || campaign?.messageTag || "HUMAN_AGENT";
   const threshold = customThresholdHours ?? campaign?.inactiveHoursThreshold ?? 24.0;
   const maxFollowUps = reqMaxFollowUps ?? campaign?.maxFollowUps ?? 1;
@@ -195,6 +200,7 @@ export async function executeFollowUpBlast(
     // Step 2 Rule Resolution: If this is Step 2 (followUpCount === 1), use the distinct Step 2 blast rule
     let leadTemplate = templateToUse;
     let leadImage = imageToUse;
+    let leadAudio = audioToUse;
 
     // Image Spin Resolution: If multiple posters configured and spin is enabled, pick random poster for this lead
     if (campaign?.enableImageSpin && campaign?.imageUrls) {
@@ -211,10 +217,24 @@ export async function executeFollowUpBlast(
       leadImage = parseSpintax(leadImage);
     }
 
+    // Voice Note Spin Resolution: If multiple voice notes configured and spin is enabled, pick random audio for this lead
+    if (campaign?.enableAudioSpin && campaign?.audioUrls) {
+      try {
+        const aUrls: string[] = typeof campaign.audioUrls === "string" ? JSON.parse(campaign.audioUrls) : campaign.audioUrls;
+        const validAUrls = Array.isArray(aUrls) ? aUrls.filter(Boolean) : [];
+        if (validAUrls.length > 0) {
+          leadAudio = validAUrls[Math.floor(Math.random() * validAUrls.length)];
+        }
+      } catch (err) {
+        // fallback to audioToUse
+      }
+    }
+
     if (lead.followUpCount === 1) {
       if (step2Campaign) {
         leadTemplate = step2Campaign.messageTemplate || leadTemplate;
         leadImage = step2Campaign.imageUrl ?? leadImage;
+        leadAudio = step2Campaign.audioUrl ?? leadAudio;
         if (step2Campaign.enableImageSpin && step2Campaign.imageUrls) {
           try {
             const s2Urls = JSON.parse(step2Campaign.imageUrls);
@@ -224,9 +244,25 @@ export async function executeFollowUpBlast(
             }
           } catch (e) {}
         }
-      } else if (campaign?.step2MessageTemplate) {
-        leadTemplate = campaign.step2MessageTemplate;
-        leadImage = campaign.step2ImageUrl ?? leadImage;
+        if (step2Campaign.enableAudioSpin && step2Campaign.audioUrls) {
+          try {
+            const s2AUrls = JSON.parse(step2Campaign.audioUrls);
+            const validS2AUrls = Array.isArray(s2AUrls) ? s2AUrls.filter(Boolean) : [];
+            if (validS2AUrls.length > 0) {
+              leadAudio = validS2AUrls[Math.floor(Math.random() * validS2AUrls.length)];
+            }
+          } catch (e) {}
+        }
+      } else {
+        if (campaign?.step2MessageTemplate) {
+          leadTemplate = campaign.step2MessageTemplate;
+        }
+        if (campaign?.step2ImageUrl) {
+          leadImage = campaign.step2ImageUrl;
+        }
+        if (campaign?.step2AudioUrl) {
+          leadAudio = campaign.step2AudioUrl;
+        }
       }
     }
 
@@ -245,13 +281,14 @@ export async function executeFollowUpBlast(
     // Determine message tag: within 24h, tag is null (Standard); outside 24h, requires tag
     const appliedTag = within24h ? null : tagToUse;
 
-    // Send Facebook Message
+    // Send Facebook Message (Image, Voice Note, and Text)
     const sendResult = await sendFacebookMessage({
       pageId: lead.pageId,
       pageAccessToken: lead.page.accessToken,
       recipientPsid: lead.psid,
       messageText: personalizedText,
       imageUrl: leadImage,
+      audioUrl: leadAudio,
       messageTag: appliedTag,
     });
 
@@ -286,6 +323,7 @@ export async function executeFollowUpBlast(
           recipientName: lead.customerName,
           messageSent: personalizedText,
           imageUrl: leadImage,
+          audioUrl: leadAudio,
           status: "DELIVERED",
           step: stepNumber,
           sentAt: messageSentAt,
@@ -302,6 +340,8 @@ export async function executeFollowUpBlast(
         mode: sendResult.mode,
         dripDelayApplied: appliedDelaySec,
         messageSent: personalizedText,
+        imageUrl: leadImage,
+        audioUrl: leadAudio,
         step: stepNumber,
       });
     } else {

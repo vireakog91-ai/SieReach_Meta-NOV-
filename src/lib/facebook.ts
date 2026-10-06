@@ -7,8 +7,9 @@ export interface SendMessageOptions {
   pageId: string;
   pageAccessToken: string;
   recipientPsid: string;
-  messageText: string;
+  messageText?: string;
   imageUrl?: string | null;
+  audioUrl?: string | null;
   messageTag?: string | null; // e.g., 'HUMAN_AGENT'
   isMockMode?: boolean;
 }
@@ -53,13 +54,13 @@ export function renderMessageTemplate(
 }
 
 /**
- * Sanitize and convert image URLs (such as Google Drive share links) into direct image stream URLs
+ * Sanitize and convert media URLs (images or audio) into direct accessible stream URLs
  */
-export function normalizeImageUrl(url: string | null | undefined): string | null {
+export function normalizeMediaUrl(url: string | null | undefined): string | null {
   if (!url || !url.trim()) return null;
   const trimmed = url.trim();
 
-  // If local upload relative path (e.g. /api/uploads/photo_xyz.jpg or /uploads/poster_xyz.jpg)
+  // If local upload relative path (e.g. /api/uploads/audio_xyz.mp3 or /api/uploads/photo_xyz.jpg)
   if (trimmed.startsWith("/")) {
     const publicBase = (
       process.env.PUBLIC_URL ||
@@ -73,13 +74,11 @@ export function normalizeImageUrl(url: string | null | undefined): string | null
   }
 
   // Convert Google Drive sharing URLs:
-  // e.g., https://drive.google.com/file/d/1UtdBd2mwtdFGz13BGsD6RXCrLV-QCNt8/view?usp=sharing
   const gDriveMatch = trimmed.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
   if (gDriveMatch && gDriveMatch[1]) {
     return `https://lh3.googleusercontent.com/d/${gDriveMatch[1]}`;
   }
 
-  // e.g., https://drive.google.com/open?id=... or /uc?id=...
   const gDriveIdMatch = trimmed.match(/drive\.google\.com\/.*[?&]id=([a-zA-Z0-9_-]+)/);
   if (gDriveIdMatch && gDriveIdMatch[1]) {
     return `https://lh3.googleusercontent.com/d/${gDriveIdMatch[1]}`;
@@ -88,8 +87,11 @@ export function normalizeImageUrl(url: string | null | undefined): string | null
   return trimmed;
 }
 
+export const normalizeImageUrl = normalizeMediaUrl;
+export const normalizeAudioUrl = normalizeMediaUrl;
+
 /**
- * Send Facebook Messenger Message + Optional Image Attachment
+ * Send Facebook Messenger Message + Optional Image and/or Voice Note Attachment
  */
 export async function sendFacebookMessage(
   options: SendMessageOptions
@@ -100,6 +102,7 @@ export async function sendFacebookMessage(
     recipientPsid,
     messageText,
     imageUrl,
+    audioUrl,
     messageTag,
     isMockMode = false,
   } = options;
@@ -126,10 +129,47 @@ export async function sendFacebookMessage(
       pageAccessToken
     )}`;
 
-    const cleanImageUrl = normalizeImageUrl(imageUrl);
+    const cleanImageUrl = normalizeMediaUrl(imageUrl);
+    const cleanAudioUrl = normalizeMediaUrl(audioUrl);
+    let lastMessageId: string | undefined = undefined;
 
+    // 1. Dispatch Voice Note Attachment if configured
+    if (cleanAudioUrl) {
+      try {
+        const payloadAudio: any = {
+          recipient: { id: recipientPsid },
+          messaging_type: messageTag ? "MESSAGE_TAG" : "RESPONSE",
+          ...(messageTag ? { tag: messageTag } : {}),
+          message: {
+            attachment: {
+              type: "audio",
+              payload: {
+                url: cleanAudioUrl,
+                is_reusable: true,
+              },
+            },
+          },
+        };
+
+        const resAudio = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payloadAudio),
+        });
+
+        const dataAudio = await resAudio.json();
+        if (resAudio.ok && !dataAudio.error) {
+          lastMessageId = dataAudio.message_id;
+        } else {
+          console.warn("Meta Audio Attachment Warning:", dataAudio.error?.message);
+        }
+      } catch (audioErr) {
+        console.warn("Failed to dispatch audio attachment:", audioErr);
+      }
+    }
+
+    // 2. Dispatch Image Attachment if configured
     if (cleanImageUrl) {
-      let imageSent = false;
       try {
         const payloadImage: any = {
           recipient: { id: recipientPsid },
@@ -154,15 +194,18 @@ export async function sendFacebookMessage(
 
         const dataImage = await resImage.json();
         if (resImage.ok && !dataImage.error) {
-          imageSent = true;
+          lastMessageId = dataImage.message_id;
         } else {
-          console.warn("Meta Image Attachment Notice:", dataImage.error?.message);
+          console.warn("Meta Image Attachment Warning:", dataImage.error?.message);
         }
       } catch (imgErr) {
         console.warn("Failed to dispatch image attachment:", imgErr);
       }
+    }
 
-      // Now send the accompanying text message
+    // 3. Dispatch accompanying text message if present
+    const hasText = Boolean(messageText && messageText.trim());
+    if (hasText) {
       const resText = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -189,38 +232,23 @@ export async function sendFacebookMessage(
         recipientId: recipientPsid,
         mode: "LIVE",
       };
-    } else {
-      // Send text message only
-      const payload: any = {
-        recipient: { id: recipientPsid },
-        messaging_type: messageTag ? "MESSAGE_TAG" : "RESPONSE",
-        ...(messageTag ? { tag: messageTag } : {}),
-        message: { text: messageText },
-      };
+    }
 
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || data.error) {
-        return {
-          success: false,
-          error: data.error?.message || "Failed to send message via Graph API",
-          mode: "LIVE",
-        };
-      }
-
+    // If media was sent without text, return success with media messageId
+    if (cleanAudioUrl || cleanImageUrl) {
       return {
         success: true,
-        messageId: data.message_id,
+        messageId: lastMessageId || `media_mid_${Date.now()}`,
         recipientId: recipientPsid,
         mode: "LIVE",
       };
     }
+
+    return {
+      success: false,
+      error: "No message text or media attachment provided to send.",
+      mode: "LIVE",
+    };
   } catch (err: any) {
     return {
       success: false,

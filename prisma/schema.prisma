@@ -74,6 +74,10 @@ model FollowUpCampaign {
   imageUrl               String?
   imageUrls              String?   // JSON array of multiple uploaded poster URLs
   enableImageSpin        Boolean   @default(false) // Randomly rotate across uploaded posters per customer
+  audioUrl               String?   // Voice note / audio message URL
+  audioUrls              String?   // JSON array of voice notes for audio rotation
+  enableAudioSpin        Boolean   @default(false) // Randomly rotate across uploaded/recorded voice notes
+  mediaType              String    @default("image") // "none", "image", "audio", "both"
   messageTag             String?   @default("HUMAN_AGENT")
   autoBlast              Boolean   @default(false)
   excludePast24h         Boolean   @default(true) // Exclude leads >24h requiring HUMAN_AGENT tag by default
@@ -84,6 +88,7 @@ model FollowUpCampaign {
   step2CampaignId        String?                  // Optional: ID of different blast rule/campaign to use for Step 2
   step2MessageTemplate   String?                  // Optional: Custom message template for Step 2
   step2ImageUrl          String?                  // Optional: Custom image for Step 2
+  step2AudioUrl          String?                  // Optional: Custom voice note for Step 2
   isActive               Boolean   @default(true)
   lastRunAt              DateTime?
   createdAt              DateTime  @default(now())
@@ -104,6 +109,7 @@ model BlastLog {
   recipientName String
   messageSent   String
   imageUrl      String?
+  audioUrl      String?   // Optional voice note / audio attachment sent
   status        String    // DELIVERED, FAILED, POLICY_VIOLATION_SKIPPED
   step          Int       @default(1) // Step 1 or Step 2
   respondedAt   DateTime?

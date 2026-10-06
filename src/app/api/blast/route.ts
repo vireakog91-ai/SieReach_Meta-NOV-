@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
       leadIds,
       customMessageTemplate,
       customImageUrl,
+      customAudioUrl,
       customThresholdHours,
       messageTag,
       targetPageId,
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
       leadIds,
       customMessageTemplate,
       customImageUrl,
+      customAudioUrl,
       customThresholdHours:
         customThresholdHours !== undefined ? parseFloat(customThresholdHours) : undefined,
       messageTag,

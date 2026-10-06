@@ -10,6 +10,8 @@ import {
   ExternalLink,
   Image as ImageIcon,
   MessageSquare,
+  Volume2,
+  Mic,
 } from "lucide-react";
 
 interface LogItem {
@@ -18,6 +20,7 @@ interface LogItem {
   recipientName: string;
   messageSent: string;
   imageUrl?: string | null;
+  audioUrl?: string | null;
   status: string;
   errorMessage?: string | null;
   sentAt: string | Date;
@@ -166,6 +169,26 @@ export function BlastLogsTab({
                           <p className="text-slate-700 dark:text-slate-200 line-clamp-2 leading-relaxed">
                             {log.messageSent}
                           </p>
+                          {log.audioUrl && (
+                            <div className="mt-1.5 flex items-center space-x-2">
+                              <audio id={`audio-${log.id}`} src={log.audioUrl} preload="none" />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const el = document.getElementById(`audio-${log.id}`) as HTMLAudioElement;
+                                  if (el) {
+                                    if (el.paused) el.play();
+                                    else el.pause();
+                                  }
+                                }}
+                                className="inline-flex items-center space-x-1.5 bg-purple-50 dark:bg-purple-950/50 hover:bg-purple-100 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 px-2 py-0.5 rounded-full text-[10px] font-semibold transition cursor-pointer"
+                                title="Listen to dispatched voice note"
+                              >
+                                <Volume2 className="w-3 h-3 text-purple-500" />
+                                <span>Voice Note Sent 🎙️</span>
+                              </button>
+                            </div>
+                          )}
                           {log.errorMessage && (
                             <p className="text-[10px] text-red-600 dark:text-red-400 mt-1 font-mono">
                               Error: {log.errorMessage}

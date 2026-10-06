@@ -28,9 +28,13 @@ import {
   Shuffle,
   Play,
   Pause,
+  Mic,
+  Volume2,
+  FileAudio,
 } from "lucide-react";
 import { renderMessageTemplate } from "@/lib/facebook";
 import { DeleteConfirmModal } from "./common/DeleteConfirmModal";
+import { VoiceRecorder } from "./VoiceRecorder";
 
 interface Campaign {
   id: string;
@@ -42,6 +46,10 @@ interface Campaign {
   imageUrl?: string | null;
   imageUrls?: string | null;
   enableImageSpin?: boolean;
+  audioUrl?: string | null;
+  audioUrls?: string | null;
+  enableAudioSpin?: boolean;
+  mediaType?: string | null;
   messageTag?: string | null;
   autoBlast: boolean;
   excludePast24h: boolean;
@@ -52,6 +60,7 @@ interface Campaign {
   step2CampaignId?: string | null;
   step2MessageTemplate?: string | null;
   step2ImageUrl?: string | null;
+  step2AudioUrl?: string | null;
   isActive: boolean;
 }
 
@@ -145,6 +154,21 @@ export function BotSetupTab({
       "Hi {{first_name}}, this is our final follow-up from {{page_name}} regarding {{ad_source}}! Let us know if you have any questions or would like to claim your offer."
   );
   const [step2ImageUrl, setStep2ImageUrl] = useState<string>(activeCampaign.step2ImageUrl || "");
+  const [step2AudioUrl, setStep2AudioUrl] = useState<string>(activeCampaign.step2AudioUrl || "");
+
+  // Media Type & Voice Notes State
+  const [mediaType, setMediaType] = useState<string>(activeCampaign.mediaType || "IMAGE");
+  const [voiceSlots, setVoiceSlots] = useState<Record<string, string>>({
+    "Voice Note 1": "",
+    "Voice Note 2": "",
+    "Voice Note 3": "",
+  });
+  const [selectedVoiceSlot, setSelectedVoiceSlot] = useState<string>("Voice Note 1");
+  const [audioUrl, setAudioUrl] = useState<string>(activeCampaign.audioUrl || "");
+  const [enableAudioSpin, setEnableAudioSpin] = useState<boolean>(
+    activeCampaign.enableAudioSpin ?? false
+  );
+
   const [isActive, setIsActive] = useState<boolean>(activeCampaign.isActive ?? false);
   const [isTogglingActive, setIsTogglingActive] = useState<boolean>(false);
 
@@ -269,10 +293,14 @@ export function BotSetupTab({
         "Hi {{first_name}}, this is our final follow-up from {{page_name}} regarding {{ad_source}}! Let us know if you have any questions or would like to claim your offer."
     );
     setStep2ImageUrl(c.step2ImageUrl || "");
+    setStep2AudioUrl(c.step2AudioUrl || "");
     setIsActive(c.isActive ?? false);
     setSaveError(null);
 
     setEnableImageSpin(c.enableImageSpin ?? false);
+    setEnableAudioSpin(c.enableAudioSpin ?? false);
+    setMediaType(c.mediaType || (c.audioUrl ? (c.imageUrl ? "BOTH" : "VOICE") : (c.imageUrl ? "IMAGE" : "IMAGE")));
+    setAudioUrl(c.audioUrl || "");
 
     // Populate poster slots from multi-image array or fallback
     if (c.imageUrls) {
@@ -307,6 +335,39 @@ export function BotSetupTab({
     }
     setSelectedPoster("Poster 1");
 
+    // Populate voice slots from multi-voice array or fallback
+    if (c.audioUrls) {
+      try {
+        const parsed = typeof c.audioUrls === "string" ? JSON.parse(c.audioUrls) : c.audioUrls;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setVoiceSlots({
+            "Voice Note 1": parsed[0] || "",
+            "Voice Note 2": parsed[1] || "",
+            "Voice Note 3": parsed[2] || "",
+          });
+        } else {
+          setVoiceSlots({
+            "Voice Note 1": c.audioUrl || "",
+            "Voice Note 2": "",
+            "Voice Note 3": "",
+          });
+        }
+      } catch {
+        setVoiceSlots({
+          "Voice Note 1": c.audioUrl || "",
+          "Voice Note 2": "",
+          "Voice Note 3": "",
+        });
+      }
+    } else {
+      setVoiceSlots({
+        "Voice Note 1": c.audioUrl || "",
+        "Voice Note 2": "",
+        "Voice Note 3": "",
+      });
+    }
+    setSelectedVoiceSlot("Voice Note 1");
+
     // Establish saved baseline snapshot to track dirty unsaved edits
     setSavedBaseline({
       name: c.name,
@@ -315,6 +376,9 @@ export function BotSetupTab({
       messageTemplate: c.messageTemplate,
       imageUrl: c.imageUrl || "",
       enableImageSpin: c.enableImageSpin ?? false,
+      audioUrl: c.audioUrl || "",
+      enableAudioSpin: c.enableAudioSpin ?? false,
+      mediaType: c.mediaType || (c.audioUrl ? (c.imageUrl ? "BOTH" : "VOICE") : (c.imageUrl ? "IMAGE" : "IMAGE")),
       messageTag: c.messageTag || "HUMAN_AGENT",
       autoBlast: c.autoBlast,
       excludePast24h: c.excludePast24h ?? true,
@@ -325,6 +389,7 @@ export function BotSetupTab({
       step2CampaignId: c.step2CampaignId || "",
       step2MessageTemplate: c.step2MessageTemplate || "",
       step2ImageUrl: c.step2ImageUrl || "",
+      step2AudioUrl: c.step2AudioUrl || "",
     });
   };
 
@@ -369,9 +434,13 @@ export function BotSetupTab({
     setMessageTemplate(
       "Hello {{customer_name}}! We noticed you inquired about {{ad_source}}. Would you like assistance placing your order?"
     );
-    setImageUrl("");
     setPosterSlots({ "Poster 1": "", "Poster 2": "", "Poster 3": "" });
     setSelectedPoster("Poster 1");
+    setMediaType("IMAGE");
+    setAudioUrl("");
+    setVoiceSlots({ "Voice Note 1": "", "Voice Note 2": "", "Voice Note 3": "" });
+    setSelectedVoiceSlot("Voice Note 1");
+    setEnableAudioSpin(false);
     setMessageTag("HUMAN_AGENT");
     setAutoBlast(false);
     setEnableImageSpin(false);
@@ -384,6 +453,7 @@ export function BotSetupTab({
       "Hi {{first_name}}, this is our final follow-up from {{page_name}} regarding {{ad_source}}! Let us know if you have any questions or would like to claim your offer."
     );
     setStep2ImageUrl("");
+    setStep2AudioUrl("");
     setIsActive(false);
     setSavedBaseline(null);
     setSaveError(null);
@@ -554,7 +624,11 @@ export function BotSetupTab({
       cooldownHours !== savedBaseline.cooldownHours ||
       (step2CampaignId || "") !== (savedBaseline.step2CampaignId || "") ||
       (step2MessageTemplate || "") !== (savedBaseline.step2MessageTemplate || "") ||
-      (step2ImageUrl || "") !== (savedBaseline.step2ImageUrl || "")
+      (step2ImageUrl || "") !== (savedBaseline.step2ImageUrl || "") ||
+      (step2AudioUrl || "") !== (savedBaseline.step2AudioUrl || "") ||
+      (mediaType || "IMAGE") !== (savedBaseline.mediaType || "IMAGE") ||
+      (audioUrl || "") !== (savedBaseline.audioUrl || "") ||
+      enableAudioSpin !== (savedBaseline.enableAudioSpin ?? false)
     );
   }, [
     selectedId,
@@ -564,6 +638,9 @@ export function BotSetupTab({
     thresholdHours,
     messageTemplate,
     imageUrl,
+    audioUrl,
+    mediaType,
+    enableAudioSpin,
     messageTag,
     autoBlast,
     excludePast24h,
@@ -574,6 +651,7 @@ export function BotSetupTab({
     step2CampaignId,
     step2MessageTemplate,
     step2ImageUrl,
+    step2AudioUrl,
   ]);
 
   const handleInsertTag = (tag: string) => {
@@ -638,6 +716,10 @@ export function BotSetupTab({
         .map((s) => posterSlots[s])
         .filter((u) => Boolean(u && u.trim()));
 
+      const voiceUrls = (["Voice Note 1", "Voice Note 2", "Voice Note 3"] as const)
+        .map((s) => voiceSlots[s])
+        .filter((u) => Boolean(u && u.trim()));
+
       const saved = await onSaveCampaign({
         id: selectedId === "new" ? undefined : selectedId,
         name,
@@ -648,6 +730,10 @@ export function BotSetupTab({
         imageUrl: postUrls[0] || imageUrl || null,
         imageUrls: postUrls.length > 0 ? JSON.stringify(postUrls) : null,
         enableImageSpin: Boolean(enableImageSpin && postUrls.length > 1),
+        audioUrl: voiceUrls[0] || audioUrl || null,
+        audioUrls: voiceUrls.length > 0 ? JSON.stringify(voiceUrls) : null,
+        enableAudioSpin: Boolean(enableAudioSpin && voiceUrls.length > 1),
+        mediaType: mediaType || "IMAGE",
         messageTag,
         autoBlast,
         excludePast24h,
@@ -658,6 +744,7 @@ export function BotSetupTab({
         step2CampaignId: step2CampaignId || null,
         step2MessageTemplate: step2MessageTemplate || null,
         step2ImageUrl: step2ImageUrl || null,
+        step2AudioUrl: step2AudioUrl || null,
         isActive: selectedId === "new" ? false : Boolean(isActive),
       });
 
@@ -677,6 +764,9 @@ export function BotSetupTab({
         messageTemplate,
         imageUrl: postUrls[0] || imageUrl || "",
         enableImageSpin: Boolean(enableImageSpin && postUrls.length > 1),
+        audioUrl: voiceUrls[0] || audioUrl || "",
+        enableAudioSpin: Boolean(enableAudioSpin && voiceUrls.length > 1),
+        mediaType: mediaType || "IMAGE",
         messageTag,
         autoBlast,
         excludePast24h,
@@ -687,6 +777,7 @@ export function BotSetupTab({
         step2CampaignId: step2CampaignId || "",
         step2MessageTemplate: step2MessageTemplate || "",
         step2ImageUrl: step2ImageUrl || "",
+        step2AudioUrl: step2AudioUrl || "",
       });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -708,12 +799,27 @@ export function BotSetupTab({
       .filter((url) => Boolean(url && url.trim()));
   }, [posterSlots]);
 
+  const filledVoiceNotes = React.useMemo(() => {
+    return (["Voice Note 1", "Voice Note 2", "Voice Note 3"] as const)
+      .map((slot) => voiceSlots[slot])
+      .filter((url) => Boolean(url && url.trim()));
+  }, [voiceSlots]);
+
   const activePreviewImage = React.useMemo(() => {
+    if (mediaType === "TEXT" || mediaType === "VOICE") return null;
     if (enableImageSpin && filledPosters.length > 1) {
       return filledPosters[previewSpinSeed % filledPosters.length];
     }
     return posterSlots[selectedPoster] || imageUrl || null;
-  }, [enableImageSpin, filledPosters, previewSpinSeed, posterSlots, selectedPoster, imageUrl]);
+  }, [mediaType, enableImageSpin, filledPosters, previewSpinSeed, posterSlots, selectedPoster, imageUrl]);
+
+  const activePreviewAudio = React.useMemo(() => {
+    if (mediaType === "TEXT" || mediaType === "IMAGE") return null;
+    if (enableAudioSpin && filledVoiceNotes.length > 1) {
+      return filledVoiceNotes[previewSpinSeed % filledVoiceNotes.length];
+    }
+    return voiceSlots[selectedVoiceSlot] || audioUrl || null;
+  }, [mediaType, enableAudioSpin, filledVoiceNotes, previewSpinSeed, voiceSlots, selectedVoiceSlot, audioUrl]);
 
   const previewRenderedText = React.useMemo(() => {
     return renderMessageTemplate(messageTemplate, {
@@ -1177,6 +1283,19 @@ export function BotSetupTab({
                         className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-purple-500 transition"
                       />
                     </div>
+
+                    <div className="pt-1">
+                      <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                        Step 2 Optional Voice Note
+                      </label>
+                      <VoiceRecorder
+                        value={step2AudioUrl}
+                        onChange={(url) => setStep2AudioUrl(url || "")}
+                        label="Step 2 Voice Note"
+                        compact={true}
+                        placeholderText="Record or upload voice note for Step 2"
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -1329,174 +1448,337 @@ export function BotSetupTab({
             </div>
           </div>
 
-          {/* Image Attachment Setup - Upload Workflow */}
-          <div className="space-y-3 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center space-x-1.5">
-                <ImageIcon className="w-4 h-4 text-blue-500 dark:text-blue-400" />
-                <span>Blast Image Flyer / Poster Attachment</span>
+          {/* Media Attachment Format Selector */}
+          <div className="space-y-1.5 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+                <Layers className="w-3.5 h-3.5 text-blue-500" />
+                <span>Media Attachment Format</span>
               </label>
               <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                Active Slot: <strong className="text-blue-600 dark:text-blue-400">{selectedPoster}</strong>
+                Choose media dispatched alongside text
               </span>
             </div>
-
-            <p className="text-xs text-slate-400">
-              Select a poster slot, then click <strong>Upload Image</strong>. The image is stored temporarily and pushed to your campaign when you click <strong>Save Bot Rule</strong>.
-            </p>
-
-            {/* Hidden native file input */}
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              accept="image/*"
-              className="hidden"
-            />
-
-            {/* Poster 1, 2, 3 selection cards */}
-            <div className="grid grid-cols-3 gap-3 pt-1">
-              {(["Poster 1", "Poster 2", "Poster 3"] as const).map((slot) => {
-                const isSelected = selectedPoster === slot;
-                const slotUrl = posterSlots[slot];
-
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { id: "IMAGE", label: "Image Flyer", icon: ImageIcon, desc: "Promotional Banner" },
+                { id: "VOICE", label: "Voice Note", icon: Mic, desc: "Audio Voice Message" },
+                { id: "BOTH", label: "Image + Voice", icon: Sparkles, desc: "Flyer & Voice Note" },
+                { id: "TEXT", label: "Text Only", icon: Tag, desc: "Clean Text Message" },
+              ].map((m) => {
+                const Icon = m.icon;
+                const isCurrent = (mediaType || "IMAGE") === m.id;
                 return (
-                  <div
-                    key={slot}
-                    onClick={() => handleSelectPosterSlot(slot)}
-                    className={`relative cursor-pointer border rounded-xl p-3 transition flex flex-col items-center justify-between min-h-[110px] text-center ${
-                      isSelected
-                        ? "bg-blue-950/30 border-blue-500 shadow-md shadow-blue-500/10 ring-1 ring-blue-500/50"
-                        : "bg-slate-900/80 border-slate-800 hover:border-slate-700"
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMediaType(m.id)}
+                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition cursor-pointer ${
+                      isCurrent
+                        ? "bg-purple-50 dark:bg-purple-950/50 border-purple-500 text-purple-700 dark:text-purple-300 ring-1 ring-purple-400/50 shadow-xs"
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
                     }`}
                   >
-                    {/* Badge / Status indicator */}
-                    <div className="w-full flex items-center justify-between mb-2">
-                      <span
-                        className={`text-xs font-bold ${
-                          isSelected ? "text-blue-400" : "text-slate-300"
-                        }`}
-                      >
-                        {slot}
-                      </span>
-                      {slotUrl ? (
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 ring-4 ring-emerald-400/20" title="Image uploaded" />
-                      ) : (
-                        <span className="w-2 h-2 rounded-full bg-slate-600" title="Empty slot" />
-                      )}
+                    <div className="flex items-center space-x-1.5">
+                      <Icon className="w-3.5 h-3.5" />
+                      <span className="text-xs font-bold">{m.label}</span>
                     </div>
-
-                    {/* Image Preview thumbnail or empty placeholder */}
-                    <div className="w-full h-14 rounded-lg overflow-hidden bg-slate-950/70 border border-slate-800/80 flex items-center justify-center relative group">
-                      {slotUrl ? (
-                        <img
-                          src={slotUrl}
-                          alt={slot}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center justify-center text-slate-500">
-                          <ImageIcon className="w-5 h-5 mb-0.5 opacity-60" />
-                          <span className="text-[10px]">No image</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Slot status text */}
-                    <div className="mt-2 text-[10px] text-slate-400 truncate max-w-full">
-                      {slotUrl ? "Uploaded" : "Empty"}
-                    </div>
-                  </div>
+                    <span className="text-[10px] text-slate-400 mt-0.5">{m.desc}</span>
+                  </button>
                 );
               })}
             </div>
+          </div>
 
-            {/* Action buttons for Selected Poster */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3.5 py-1.5 rounded-xl transition shadow-sm disabled:opacity-50"
-                >
-                  <Upload className={`w-3.5 h-3.5 ${isUploading ? "animate-bounce" : ""}`} />
-                  <span>{isUploading ? "Uploading..." : `Upload Image to ${selectedPoster}`}</span>
-                </button>
+          {/* Image Attachment Setup - Upload Workflow */}
+          {(mediaType === "IMAGE" || mediaType === "BOTH") && (
+            <div className="space-y-3 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl p-4 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center space-x-1.5">
+                  <ImageIcon className="w-4 h-4 text-blue-500 dark:text-blue-400" />
+                  <span>Blast Image Flyer / Poster Attachment</span>
+                </label>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Active Slot: <strong className="text-blue-600 dark:text-blue-400">{selectedPoster}</strong>
+                </span>
+              </div>
 
-                {posterSlots[selectedPoster] && (
+              <p className="text-xs text-slate-400">
+                Select a poster slot, then click <strong>Upload Image</strong>. The image is stored temporarily and pushed to your campaign when you click <strong>Save Bot Rule</strong>.
+              </p>
+
+              {/* Hidden native file input */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept="image/*"
+                className="hidden"
+              />
+
+              {/* Poster 1, 2, 3 selection cards */}
+              <div className="grid grid-cols-3 gap-3 pt-1">
+                {(["Poster 1", "Poster 2", "Poster 3"] as const).map((slot) => {
+                  const isSelected = selectedPoster === slot;
+                  const slotUrl = posterSlots[slot];
+
+                  return (
+                    <div
+                      key={slot}
+                      onClick={() => handleSelectPosterSlot(slot)}
+                      className={`relative cursor-pointer border rounded-xl p-3 transition flex flex-col items-center justify-between min-h-[110px] text-center ${
+                        isSelected
+                          ? "bg-blue-950/30 border-blue-500 shadow-md shadow-blue-500/10 ring-1 ring-blue-500/50"
+                          : "bg-slate-900/80 border-slate-800 hover:border-slate-700"
+                      }`}
+                    >
+                      {/* Badge / Status indicator */}
+                      <div className="w-full flex items-center justify-between mb-2">
+                        <span
+                          className={`text-xs font-bold ${
+                            isSelected ? "text-blue-400" : "text-slate-300"
+                          }`}
+                        >
+                          {slot}
+                        </span>
+                        {slotUrl ? (
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 ring-4 ring-emerald-400/20" title="Image uploaded" />
+                        ) : (
+                          <span className="w-2 h-2 rounded-full bg-slate-600" title="Empty slot" />
+                        )}
+                      </div>
+
+                      {/* Image Preview thumbnail or empty placeholder */}
+                      <div className="w-full h-14 rounded-lg overflow-hidden bg-slate-950/70 border border-slate-800/80 flex items-center justify-center relative group">
+                        {slotUrl ? (
+                          <img
+                            src={slotUrl}
+                            alt={slot}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-slate-500">
+                            <ImageIcon className="w-5 h-5 mb-0.5 opacity-60" />
+                            <span className="text-[10px]">No image</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Slot status text */}
+                      <div className="mt-2 text-[10px] text-slate-400 truncate max-w-full">
+                        {slotUrl ? "Uploaded" : "Empty"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Action buttons for Selected Poster */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
+                <div className="flex items-center space-x-2">
                   <button
                     type="button"
-                    onClick={() => handleRemovePoster(selectedPoster)}
-                    className="flex items-center space-x-1 text-slate-400 hover:text-red-400 text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-800 hover:border-red-500/30 transition"
-                    title="Remove image from this slot"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3.5 py-1.5 rounded-xl transition shadow-sm disabled:opacity-50"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Clear</span>
+                    <Upload className={`w-3.5 h-3.5 ${isUploading ? "animate-bounce" : ""}`} />
+                    <span>{isUploading ? "Uploading..." : `Upload Image to ${selectedPoster}`}</span>
                   </button>
-                )}
-              </div>
 
-              {/* Status Note */}
-              <div className="text-[11px] text-slate-400">
-                {filledPosters.length > 0 ? (
-                  <span className="text-emerald-500 dark:text-emerald-400 flex items-center space-x-1 font-medium">
-                    <Check className="w-3.5 h-3.5" />
-                    <span>{filledPosters.length} flyer(s) ready (saves when clicking Save Bot Rule)</span>
-                  </span>
-                ) : (
-                  <span className="text-slate-500">No flyer attached (Text-only message)</span>
-                )}
-              </div>
-            </div>
-
-            {/* Direct URL / Google Drive link input option */}
-            <div className="pt-1">
-              <input
-                type="text"
-                value={posterSlots[selectedPoster] || ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setPosterSlots((prev) => ({ ...prev, [selectedPoster]: val }));
-                  setImageUrl(val);
-                }}
-                placeholder={`Or paste direct image URL / Google Drive sharing link for ${selectedPoster}...`}
-                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition"
-              />
-            </div>
-
-            {/* Multi-Poster Spin Rotation Toggle (appears when 2+ posters uploaded) */}
-            {filledPosters.length > 1 && (
-              <div className="p-3.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 flex items-center justify-between gap-3 shadow-2xs animate-in fade-in">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-                    <Shuffle className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                      <span>Enable Poster Spin (Multi-Image Rotation)</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/80 dark:text-purple-300 font-mono font-bold">
-                        {filledPosters.length} Posters Active
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-purple-700 dark:text-purple-300/90 leading-tight mt-0.5">
-                      Randomly alternates across your {filledPosters.length} uploaded posters for each recipient to maximize response rates and avoid ad fatigue.
-                    </p>
-                  </div>
+                  {posterSlots[selectedPoster] && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePoster(selectedPoster)}
+                      className="flex items-center space-x-1 text-slate-400 hover:text-red-400 text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-800 hover:border-red-500/30 transition"
+                      title="Remove image from this slot"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Clear</span>
+                    </button>
+                  )}
                 </div>
 
-                <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                  <input
-                    type="checkbox"
-                    checked={enableImageSpin}
-                    onChange={(e) => setEnableImageSpin(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-750 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
-                </label>
+                {/* Status Note */}
+                <div className="text-[11px] text-slate-400">
+                  {filledPosters.length > 0 ? (
+                    <span className="text-emerald-500 dark:text-emerald-400 flex items-center space-x-1 font-medium">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{filledPosters.length} flyer(s) ready (saves when clicking Save Bot Rule)</span>
+                    </span>
+                  ) : (
+                    <span className="text-slate-500">No flyer attached</span>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* Direct URL / Google Drive link input option */}
+              <div className="pt-1">
+                <input
+                  type="text"
+                  value={posterSlots[selectedPoster] || ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setPosterSlots((prev) => ({ ...prev, [selectedPoster]: val }));
+                    setImageUrl(val);
+                  }}
+                  placeholder={`Or paste direct image URL / Google Drive sharing link for ${selectedPoster}...`}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition"
+                />
+              </div>
+
+              {/* Multi-Poster Spin Rotation Toggle (appears when 2+ posters uploaded) */}
+              {filledPosters.length > 1 && (
+                <div className="p-3.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 flex items-center justify-between gap-3 shadow-2xs animate-in fade-in">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                      <Shuffle className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <span>Enable Poster Spin (Multi-Image Rotation)</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/80 dark:text-purple-300 font-mono font-bold">
+                          {filledPosters.length} Posters Active
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-purple-700 dark:text-purple-300/90 leading-tight mt-0.5">
+                        Randomly alternates across your {filledPosters.length} uploaded posters for each recipient to maximize response rates and avoid ad fatigue.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={enableImageSpin}
+                      onChange={(e) => setEnableImageSpin(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-750 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Voice Note Attachment Setup - Record & Upload */}
+          {(mediaType === "VOICE" || mediaType === "BOTH") && (
+            <div className="space-y-3 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl p-4 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center space-x-1.5">
+                  <Mic className="w-4 h-4 text-purple-500 dark:text-purple-400" />
+                  <span>Blast Voice Note Attachment</span>
+                </label>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Active Slot: <strong className="text-purple-600 dark:text-purple-400">{selectedVoiceSlot}</strong>
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-400">
+                Record directly in your browser or upload an audio file (.mp3, .m4a, .wav). Sent to recipients as an authentic Facebook Messenger voice message.
+              </p>
+
+              {/* Voice Note 1, 2, 3 selection cards */}
+              <div className="grid grid-cols-3 gap-3 pt-1">
+                {(["Voice Note 1", "Voice Note 2", "Voice Note 3"] as const).map((slot) => {
+                  const isSelected = selectedVoiceSlot === slot;
+                  const slotAudio = voiceSlots[slot];
+
+                  return (
+                    <div
+                      key={slot}
+                      onClick={() => setSelectedVoiceSlot(slot)}
+                      className={`relative cursor-pointer border rounded-xl p-3 transition flex flex-col items-center justify-between min-h-[90px] text-center ${
+                        isSelected
+                          ? "bg-purple-950/30 border-purple-500 shadow-md shadow-purple-500/10 ring-1 ring-purple-500/50"
+                          : "bg-slate-900/80 border-slate-800 hover:border-slate-700"
+                      }`}
+                    >
+                      {/* Slot Header */}
+                      <div className="w-full flex items-center justify-between mb-1.5">
+                        <span
+                          className={`text-xs font-bold ${
+                            isSelected ? "text-purple-400" : "text-slate-300"
+                          }`}
+                        >
+                          {slot}
+                        </span>
+                        {slotAudio ? (
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 ring-4 ring-emerald-400/20" title="Voice note ready" />
+                        ) : (
+                          <span className="w-2 h-2 rounded-full bg-slate-600" title="Empty slot" />
+                        )}
+                      </div>
+
+                      {/* Icon preview */}
+                      <div className="w-full h-10 rounded-lg bg-slate-950/70 border border-slate-800/80 flex items-center justify-center">
+                        {slotAudio ? (
+                          <Volume2 className="w-5 h-5 text-purple-400" />
+                        ) : (
+                          <Mic className="w-5 h-5 text-slate-500 opacity-60" />
+                        )}
+                      </div>
+
+                      {/* Slot status text */}
+                      <div className="mt-1.5 text-[10px] text-slate-400 truncate max-w-full font-mono">
+                        {slotAudio ? "Ready ✓" : "Empty"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Interactive Voice Recorder Component for Selected Slot */}
+              <div className="pt-1">
+                <VoiceRecorder
+                  value={voiceSlots[selectedVoiceSlot] || ""}
+                  onChange={(url) => {
+                    setVoiceSlots((prev) => ({
+                      ...prev,
+                      [selectedVoiceSlot]: url || "",
+                    }));
+                    if (selectedVoiceSlot === "Voice Note 1" || !audioUrl) {
+                      setAudioUrl(url || "");
+                    }
+                  }}
+                  label={`Voice Recording for ${selectedVoiceSlot}`}
+                  placeholderText={`Record or upload audio file for ${selectedVoiceSlot}`}
+                />
+              </div>
+
+              {/* Multi-Voice Spin Rotation Toggle (appears when 2+ voice notes uploaded) */}
+              {filledVoiceNotes.length > 1 && (
+                <div className="p-3.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 flex items-center justify-between gap-3 shadow-2xs animate-in fade-in">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                      <Shuffle className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <span>Enable Voice Note Spin (Multi-Voice Rotation)</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/80 dark:text-purple-300 font-mono font-bold">
+                          {filledVoiceNotes.length} Voice Notes Active
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-purple-700 dark:text-purple-300/90 leading-tight mt-0.5">
+                        Randomly alternates across your {filledVoiceNotes.length} voice notes for each recipient to sound natural and prevent repetitive automated detection.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={enableAudioSpin}
+                      onChange={(e) => setEnableAudioSpin(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-750 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Auto-Blast Background Dispatcher Toggle */}
           <div className="flex items-center justify-between pt-2 border-t border-slate-800">
@@ -1784,6 +2066,38 @@ export function BotSetupTab({
                           "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800&auto=format&fit=crop&q=80";
                       }}
                     />
+                  </div>
+                </div>
+              )}
+
+              {/* SieReach Follow-Up Blast: Voice Note Attachment */}
+              {activePreviewAudio && (
+                <div className="flex flex-col items-start space-y-1 animate-in fade-in">
+                  {enableAudioSpin && filledVoiceNotes.length > 1 && (
+                    <span className="text-[9px] font-mono text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800/60 px-1.5 py-0.5 rounded-md font-bold flex items-center gap-1">
+                      <Shuffle className="w-2.5 h-2.5" />
+                      <span>Voice Spun ({(previewSpinSeed % filledVoiceNotes.length) + 1} of {filledVoiceNotes.length})</span>
+                    </span>
+                  )}
+                  <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl rounded-tl-sm px-3.5 py-2.5 shadow-md flex items-center space-x-3 max-w-[85%] border border-blue-500/30">
+                    <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                      <Play className="w-3.5 h-3.5 ml-0.5 text-white fill-white" />
+                    </div>
+                    <div className="flex-1 space-y-1 min-w-[130px]">
+                      <div className="flex items-center space-x-1 h-3.5">
+                        {[35, 75, 40, 95, 60, 100, 50, 85, 45, 80, 35, 90, 45, 65].map((h, i) => (
+                          <div
+                            key={i}
+                            className="w-1 bg-white/80 rounded-full"
+                            style={{ height: `${h}%` }}
+                          />
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-white/80 font-mono">
+                        <span>0:18</span>
+                        <span className="text-[9px] bg-white/20 px-1 rounded font-sans">Voice Note</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
