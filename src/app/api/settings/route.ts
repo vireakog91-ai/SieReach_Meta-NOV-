@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminAuth } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+const noCacheHeaders = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  Pragma: "no-cache",
+  Expires: "0",
+};
+
 export async function GET(req: NextRequest) {
   const unauthorized = await requireAdminAuth(req);
   if (unauthorized) return unauthorized;
@@ -16,21 +25,24 @@ export async function GET(req: NextRequest) {
     const rawSecret = settings["META_APP_SECRET"] ?? "";
     const maskedSecret = rawSecret ? "••••••••••••••••" : "";
 
-    return NextResponse.json({
-      success: true,
-      settings: {
-        MOCK_MODE: settings["MOCK_MODE"] ?? "true",
-        META_APP_ID: settings["META_APP_ID"] ?? "",
-        META_APP_SECRET: maskedSecret,
-        HAS_APP_SECRET: Boolean(rawSecret),
-        WEBHOOK_VERIFY_TOKEN: settings["WEBHOOK_VERIFY_TOKEN"] ?? "sielab_reach_verify_token_2026",
-        REPORT_AOV: settings["REPORT_AOV"] ?? "45",
+    return NextResponse.json(
+      {
+        success: true,
+        settings: {
+          MOCK_MODE: settings["MOCK_MODE"] ?? "true",
+          META_APP_ID: settings["META_APP_ID"] ?? "",
+          META_APP_SECRET: maskedSecret,
+          HAS_APP_SECRET: Boolean(rawSecret),
+          WEBHOOK_VERIFY_TOKEN: settings["WEBHOOK_VERIFY_TOKEN"] ?? "sielab_reach_verify_token_2026",
+          REPORT_AOV: settings["REPORT_AOV"] ?? "45",
+        },
       },
-    });
+      { headers: noCacheHeaders }
+    );
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err.message },
-      { status: 500 }
+      { status: 500, headers: noCacheHeaders }
     );
   }
 }

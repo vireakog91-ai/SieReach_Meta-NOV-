@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { executeFollowUpBlast } from "@/lib/blaster";
 import { requireAdminAuth } from "@/lib/auth";
+import { syncLiveConversations } from "@/lib/scanner";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+const noCacheHeaders = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  Pragma: "no-cache",
+  Expires: "0",
+};
 
 /**
  * Core Auto-Blast Runner Function
@@ -32,6 +42,24 @@ export async function runAutoBlastSweep() {
       message: "No active auto-blast campaigns configured.",
       results: [],
     };
+  }
+
+  // 1.5 Synchronize live conversations from Meta Graph API for active auto-blast pages
+  // Guarantees we have the freshest customer messages and avoids messaging anyone who recently replied
+  try {
+    const activePageIds = new Set<string>();
+    for (const c of autoCampaigns) {
+      if (c.pageId) activePageIds.add(c.pageId);
+    }
+    if (activePageIds.size > 0) {
+      for (const pid of activePageIds) {
+        await syncLiveConversations(pid);
+      }
+    } else {
+      await syncLiveConversations();
+    }
+  } catch (syncErr) {
+    console.error("Auto-blast live Meta sync notice:", syncErr);
   }
 
   const results: any[] = [];
@@ -177,15 +205,18 @@ export async function GET(req: NextRequest) {
 
   try {
     const sweepReport = await runAutoBlastSweep();
-    return NextResponse.json({
-      success: true,
-      data: sweepReport,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: sweepReport,
+      },
+      { headers: noCacheHeaders }
+    );
   } catch (err: any) {
     console.error("Auto-blast cron error:", err);
     return NextResponse.json(
       { success: false, error: err.message },
-      { status: 500 }
+      { status: 500, headers: noCacheHeaders }
     );
   }
 }
@@ -205,11 +236,14 @@ export async function POST(req: NextRequest) {
 
   try {
     const sweepReport = await runAutoBlastSweep();
-    return NextResponse.json({
-      success: true,
-      message: `Auto-blast sweep completed: ${sweepReport.totalDelivered} message(s) delivered.`,
-      data: sweepReport,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        message: `Auto-blast sweep completed: ${sweepReport.totalDelivered} message(s) delivered.`,
+        data: sweepReport,
+      },
+      { headers: noCacheHeaders }
+    );
   } catch (err: any) {
     console.error("Auto-blast cron error:", err);
     return NextResponse.json(

@@ -43,7 +43,7 @@ export interface ScannerSummary {
 /**
  * Sync live conversations from Meta Graph API for connected pages
  */
-async function syncLiveConversations(pageIdFilter?: string | null) {
+export async function syncLiveConversations(pageIdFilter?: string | null) {
   try {
     const pages = await prisma.facebookPage.findMany({
       where: {

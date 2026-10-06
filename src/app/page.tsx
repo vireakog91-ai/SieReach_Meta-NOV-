@@ -169,18 +169,19 @@ export default function SieReachDashboard() {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
-  // Fetch all data in parallel for high-speed sub-200ms loading
+  // Fetch all data in parallel for high-speed sub-200ms loading with no-store cache busting
   const fetchData = useCallback(async () => {
     try {
       const pageParam = selectedPageId !== "ALL" ? `&pageId=${selectedPageId}` : "";
+      const t = Date.now();
 
       const [portRes, pagesRes, leadsRes, campRes, logsRes, setRes] = await Promise.all([
-        fetch("/api/portfolios").catch(() => null),
-        fetch("/api/pages").catch(() => null),
-        fetch(`/api/leads?thresholdHours=${thresholdHours}${pageParam}`).catch(() => null),
-        fetch("/api/campaigns").catch(() => null),
-        fetch("/api/logs").catch(() => null),
-        fetch("/api/settings").catch(() => null),
+        fetch(`/api/portfolios?_t=${t}`, { cache: "no-store" }).catch(() => null),
+        fetch(`/api/pages?_t=${t}`, { cache: "no-store" }).catch(() => null),
+        fetch(`/api/leads?thresholdHours=${thresholdHours}${pageParam}&_t=${t}`, { cache: "no-store" }).catch(() => null),
+        fetch(`/api/campaigns?_t=${t}`, { cache: "no-store" }).catch(() => null),
+        fetch(`/api/logs?_t=${t}`, { cache: "no-store" }).catch(() => null),
+        fetch(`/api/settings?_t=${t}`, { cache: "no-store" }).catch(() => null),
       ]);
 
       if (portRes?.ok) {
@@ -332,13 +333,14 @@ export default function SieReachDashboard() {
     setIsAutoSyncing(true);
 
     try {
-      // 1. Silently refresh live data
-      await fetchData();
-
-      // 2. If any campaign has active auto-blast configured, run the auto-pilot sweep
+      // 1. If any campaign has active auto-blast configured, run the auto-pilot sweep first
+      // In the background, this syncs latest Meta Graph API conversations and evaluates rules
       const hasAutoBlast = campaigns.some((c) => c.autoBlast && c.isActive);
       if (hasAutoBlast) {
-        const res = await fetch("/api/cron/auto-blast", { method: "POST" });
+        const res = await fetch("/api/cron/auto-blast", {
+          method: "POST",
+          headers: { "Cache-Control": "no-cache" },
+        });
         const json = await res.json();
         if (json.success && json.data) {
           const delivered = json.data.totalDelivered || 0;
@@ -352,8 +354,6 @@ export default function SieReachDashboard() {
           });
 
           if (delivered > 0) {
-            // Re-fetch to update followed-up statuses, charts, and blast logs
-            await fetchData();
             setBlastFeedback({
               show: true,
               title: "⚡ Auto-Pilot Dispatched Follow-Ups",
@@ -364,6 +364,9 @@ export default function SieReachDashboard() {
           }
         }
       }
+
+      // 2. Refresh live data with cache-busting to immediately update dashboard UI
+      await fetchData();
     } catch (err) {
       console.error("Scheduled sync error:", err);
     } finally {
@@ -373,14 +376,21 @@ export default function SieReachDashboard() {
     }
   }, [campaigns, fetchData]);
 
-  // Scheduled 1-second Countdown Ticker
+  const runScheduledSyncRef = React.useRef(runScheduledSync);
   useEffect(() => {
-    if (syncScheduleSeconds === 0) return; // Paused
+    runScheduledSyncRef.current = runScheduledSync;
+  }, [runScheduledSync]);
+
+  // Scheduled 1-second Countdown Ticker (Stable Ref-Based Loop)
+  useEffect(() => {
+    if (syncScheduleSeconds <= 0) return; // Paused
 
     const timer = setInterval(() => {
       setCountdownSeconds((prev) => {
         if (prev <= 1) {
-          runScheduledSync();
+          setTimeout(() => {
+            runScheduledSyncRef.current();
+          }, 0);
           return syncScheduleSeconds;
         }
         return prev - 1;
@@ -388,7 +398,7 @@ export default function SieReachDashboard() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [syncScheduleSeconds, runScheduledSync]);
+  }, [syncScheduleSeconds]);
 
   const handleSelectSyncSchedule = (newSeconds: number) => {
     setSyncScheduleSeconds(newSeconds);
