@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -30,9 +30,10 @@ model FacebookPage {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  leads     LeadConversation[]
-  campaigns FollowUpCampaign[]
-  logs      BlastLog[]
+  leads      LeadConversation[]
+  campaigns  FollowUpCampaign[]
+  logs       BlastLog[]
+  cdcTargets CdcPostTarget[]
 }
 
 model LeadConversation {
@@ -55,6 +56,8 @@ model LeadConversation {
   repliedAt             DateTime?
   repliedAfterStep      Int?      // 1 if customer replied after Step 1, 2 if after Step 2
   notes                 String?
+  isConverted           Boolean   @default(false)
+  orderValue            Float?    // Actual or estimated converted purchase revenue ($)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -124,4 +127,113 @@ model SystemSetting {
   updatedAt   DateTime @updatedAt
 }
 
+// ==========================================
+// CDC (Channel Distribution Center) Models
+// ==========================================
 
+model CdcPostTemplate {
+  id           String   @id @default(cuid())
+  businessName String   @default("SieLab Retail Group")
+  title        String
+  category     String   @default("Promotion") // Promotion, Announcement, Product, Engagement, Tips, Seasonal
+  content      String   // Formatted text with placeholders: {{page_name}}, {{business_name}}, Spintax
+  mediaType    String   @default("none") // "none", "image", "multi_image", "video"
+  mediaUrls    String?  // JSON array of image/video URLs
+  tags         String?  // JSON array or comma-separated tags
+  isPinned     Boolean  @default(false)
+
+  // High-Growth & Lead Conversion
+  enableFirstComment   Boolean  @default(false)
+  firstComment         String?
+  callToActionType     String?  @default("NONE") // NONE, MESSAGE_PAGE, WHATSAPP, LEARN_MORE, SHOP_NOW
+  callToActionTitle    String?  @default("Direct Messenger Inquiry")
+  callToActionUrl      String?
+  enableCommentToDm    Boolean  @default(false)
+  commentToDmKeyword   String?  @default("ALL") // "ALL" or comma-separated "pm, price, info"
+  commentToDmReply     String?  // Public comment reply
+  commentToDmMiniBlast String?  // Private Messenger DM
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model CdcPost {
+  id           String          @id @default(cuid())
+  businessName String          @default("SieLab Retail Group")
+  title        String?
+  content      String
+  mediaType    String          @default("none") // "none", "image", "multi_image", "video"
+  mediaUrls    String?         // JSON array of asset URLs
+  status       String          @default("DRAFT") // DRAFT, SCHEDULED, PUBLISHING, PUBLISHED, PARTIALLY_FAILED, FAILED
+  scheduledAt  DateTime?
+  publishedAt  DateTime?
+
+  // High-Growth & Lead Conversion
+  enableFirstComment   Boolean  @default(false)
+  firstComment         String?
+  callToActionType     String?  @default("NONE") // NONE, MESSAGE_PAGE, WHATSAPP, LEARN_MORE, SHOP_NOW
+  callToActionTitle    String?  @default("Direct Messenger Inquiry")
+  callToActionUrl      String?
+  enableCommentToDm    Boolean  @default(false)
+  commentToDmKeyword   String?  @default("ALL")
+  commentToDmReply     String?
+  commentToDmMiniBlast String?
+
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  targets      CdcPostTarget[]
+}
+
+model CdcPostTarget {
+  id             String       @id @default(cuid())
+  postId         String
+  post           CdcPost      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  pageId         String
+  page           FacebookPage @relation(fields: [pageId], references: [pageId], onDelete: Cascade)
+  status         String       @default("PENDING") // PENDING, PUBLISHED, FAILED
+  metaPostId     String?
+  firstCommentId String?      // Meta Graph API ID for the auto first comment
+  errorMessage   String?
+  publishedAt    DateTime?
+  customText     String?
+  scheduledAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([postId, pageId])
+}
+
+// ==========================================
+// Advanced Ads Analytics & Creative Intelligence
+// ==========================================
+
+model AdCreativeInsight {
+  id                    String   @id @default(cuid())
+  adSource              String   @unique
+  pageId                String?
+  pageName              String?
+  businessName          String   @default("SieLab Retail Group")
+  mediaType             String   @default("photo") // "photo", "video", "carousel", "text"
+  visualStyle           String   @default("Studio Product") // "UGC / Real Life", "Studio Product", "Lifestyle In-Use", "Before-After", "Infographic / Diagram", "Cinematic Reel", "Meme / Trend"
+  mediaUrl              String?
+  videoDurationSeconds  Int      @default(0)
+  aspectRatio           String   @default("1:1") // "9:16", "1:1", "4:5", "16:9"
+  visualHook            String?
+  hookHeadline          String?
+  copywritingFramework  String   @default("Direct Offer") // "Problem-Agitate-Solve (PAS)", "Direct Offer / Discount", "Social Proof / Testimonial", "FOMO / Scarcity", "Educational / How-to", "Storytelling"
+  callToAction          String   @default("Send Message")
+  emotionalTone         String   @default("Direct Value") // "Urgency & FOMO", "Trust & Authority", "Curiosity & Wonder", "Delight & Luxury", "Direct Value"
+  contentLengthCategory String   @default("Medium (50-150 words)") // "Short (<50 words)", "Medium (50-150 words)", "Long (>150 words)"
+  uniqueSellingPoint    String?
+  campaignObjective     String   @default("MESSAGES") // "MESSAGES", "SALES", "CONVERSIONS", "LEADS", "ENGAGEMENT"
+  campaignDesign        String   @default("Cold Audience Broad") // "Cold Audience Broad", "Retargeting Cart Abandoners", "Lookalike 1% Buyers", "Flash Sale Blast"
+  targetAudience        String   @default("General Shoppers")
+  placement             String   @default("All Meta Placements") // "IG Reels + FB Feed", "FB Feed Only", "Instagram Explore + Stories"
+  offerType             String   @default("Percentage Discount") // "Percentage Discount", "BOGO (Buy 1 Get 1)", "Free Gift", "Free COD Shipping", "Bundle Saving"
+  adSpendEstimated      Float    @default(50.0)
+  orderConversionValue  Float?
+  notes                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}

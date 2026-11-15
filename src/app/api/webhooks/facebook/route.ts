@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+import {
+  publishFacebookPostComment,
+  sendFacebookPrivateReply,
+} from "@/lib/facebook";
 
 /**
  * Facebook Messenger Webhook verification endpoint (GET)
@@ -107,6 +111,13 @@ export async function POST(req: NextRequest) {
               const wasFollowedUp = existingLead && existingLead.followUpCount > 0;
               const stepReplied = wasFollowedUp ? existingLead.followUpCount : null;
 
+              // Extract ad referral data if lead arrived from a Meta Click-to-Messenger Ad
+              const referral = event.referral || event.postback?.referral;
+              const extractedAdSource =
+                referral?.ads_context_data?.ad_title ||
+                (referral?.ad_id ? `Meta Ad #${referral.ad_id}` : referral?.ref) ||
+                null;
+
               // Update lead conversation
               await prisma.leadConversation.upsert({
                 where: {
@@ -119,12 +130,14 @@ export async function POST(req: NextRequest) {
                   lastCustomerMessage: text,
                   lastCustomerMessageAt: now,
                   status: "REPLIED",
+                  ...(extractedAdSource && !existingLead?.adSource ? { adSource: extractedAdSource } : {}),
                   ...(wasFollowedUp ? { repliedAt: now, repliedAfterStep: stepReplied } : {}),
                 },
                 create: {
                   pageId,
                   psid: senderPsid,
                   customerName: `Customer (${senderPsid.slice(-4)})`,
+                  adSource: extractedAdSource || "Meta Messenger Ad",
                   lastCustomerMessage: text,
                   lastCustomerMessageAt: now,
                   lastAgentMessage: "Awaiting initial agent response",
@@ -167,6 +180,124 @@ export async function POST(req: NextRequest) {
                     lastAgentMessage: agentText,
                     lastAgentMessageAt: now,
                     status: "AWAITING_CUSTOMER",
+                  },
+                });
+              }
+            }
+          }
+        }
+
+        // Handle Feed changes (e.g. comments on posts for Comment-to-DM funnels)
+        if (entry.changes && Array.isArray(entry.changes)) {
+          for (const change of entry.changes) {
+            if (
+              change.field === "feed" &&
+              change.value?.item === "comment" &&
+              change.value?.verb === "add"
+            ) {
+              const commentVal = change.value;
+              const commenterId = commentVal.from?.id;
+              const commenterName = commentVal.from?.name || "Customer";
+              const commentMessage = (commentVal.message || "").trim();
+              const commentId = commentVal.comment_id;
+              const rawPostId = commentVal.post_id;
+
+              // Ignore if comment is made by the page itself (e.g. First-Comment)
+              if (!commenterId || commenterId === pageId) {
+                continue;
+              }
+
+              // Find associated CDC Post Target by metaPostId
+              const matchingTargets = await prisma.cdcPostTarget.findMany({
+                where: {
+                  pageId,
+                  OR: [
+                    { metaPostId: rawPostId },
+                    { metaPostId: rawPostId.includes("_") ? rawPostId.split("_")[1] : rawPostId },
+                    { metaPostId: `${pageId}_${rawPostId}` },
+                  ],
+                },
+                include: {
+                  post: true,
+                  page: true,
+                },
+              });
+
+              const target = matchingTargets[0];
+              if (!target || !target.post || !target.post.enableCommentToDm) {
+                continue;
+              }
+
+              const requiredKeyword = (target.post.commentToDmKeyword || "ALL").trim().toLowerCase();
+              const isMatch =
+                requiredKeyword === "all" ||
+                commentMessage.toLowerCase().includes(requiredKeyword);
+
+              if (isMatch) {
+                const now = new Date();
+                const replacer = (tmpl: string) =>
+                  tmpl
+                    .replace(/\{\{name\}\}/gi, commenterName)
+                    .replace(/\{\{page_name\}\}/gi, target.page.name)
+                    .replace(/\{\{business_name\}\}/gi, target.post.businessName);
+
+                // 1. Dispatch Public Reply to user comment if configured
+                if (target.post.commentToDmReply && target.post.commentToDmReply.trim()) {
+                  const replyText = replacer(target.post.commentToDmReply);
+                  try {
+                    await publishFacebookPostComment({
+                      postId: commentId,
+                      pageAccessToken: target.page.accessToken,
+                      message: replyText,
+                      isMockMode: false,
+                    });
+                  } catch (replyErr) {
+                    console.warn(`[CDC Webhook] Failed to publish comment reply:`, replyErr);
+                  }
+                }
+
+                // 2. Dispatch Private DM (Messenger) via recipient.comment_id if configured
+                let sentDmText = "";
+                if (target.post.commentToDmMiniBlast && target.post.commentToDmMiniBlast.trim()) {
+                  sentDmText = replacer(target.post.commentToDmMiniBlast);
+                  try {
+                    await sendFacebookPrivateReply({
+                      commentId,
+                      pageAccessToken: target.page.accessToken,
+                      message: sentDmText,
+                      isMockMode: false,
+                    });
+                  } catch (dmErr) {
+                    console.warn(`[CDC Webhook] Failed to send private reply DM:`, dmErr);
+                  }
+                }
+
+                // 3. Upsert lead into LeadConversation CRM pipeline
+                await prisma.leadConversation.upsert({
+                  where: {
+                    pageId_psid: {
+                      pageId,
+                      psid: commenterId,
+                    },
+                  },
+                  update: {
+                    customerName: commenterName,
+                    lastCustomerMessage: `[Post Comment: "${commentMessage}"]`,
+                    lastCustomerMessageAt: now,
+                    lastAgentMessage: sentDmText ? `[Auto DM: "${sentDmText}"]` : "Automated Comment Reply",
+                    lastAgentMessageAt: now,
+                    status: "FOLLOWED_UP",
+                  },
+                  create: {
+                    pageId,
+                    psid: commenterId,
+                    customerName: commenterName,
+                    adSource: `CDC Post: ${target.post.title || "Social Post"}`,
+                    lastCustomerMessage: `[Post Comment: "${commentMessage}"]`,
+                    lastCustomerMessageAt: now,
+                    lastAgentMessage: sentDmText ? `[Auto DM: "${sentDmText}"]` : "Automated Comment Reply",
+                    lastAgentMessageAt: now,
+                    status: "FOLLOWED_UP",
                   },
                 });
               }

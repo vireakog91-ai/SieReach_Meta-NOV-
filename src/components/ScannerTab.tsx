@@ -17,6 +17,7 @@ import {
   Rows,
   Ban,
   Send,
+  Radar,
 } from "lucide-react";
 import { AnalyzedLead } from "@/lib/scanner";
 
@@ -184,51 +185,75 @@ export function ScannerTab({
 
   return (
     <div className="space-y-6">
-      {/* Control Banner: Streamlined Live Scanner Header & Actions */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Unified Hero Banner */}
+      <div className="tool-hero-banner blaster-hero-banner bg-gradient-to-r from-blue-50 via-sky-50/50 to-white dark:from-blue-950 dark:via-sky-950 dark:to-slate-900 border border-blue-200/80 dark:border-blue-800/40 rounded-3xl p-6 sm:p-7 text-slate-900 dark:text-white shadow-sm dark:shadow-xl relative overflow-hidden transition-all">
+        <div className="absolute -right-16 -top-16 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute right-40 -bottom-10 w-48 h-48 bg-sky-500/15 rounded-full blur-2xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
           <div>
-            <div className="flex items-center space-x-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Live Customer Scanner</h2>
+            <div className="flex items-center space-x-2.5">
+              <span className="blaster-badge-pill px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-300 border border-blue-300 dark:border-blue-400/30 text-[11px] font-bold uppercase tracking-wider">
+                Recovery Engine
+              </span>
+              <span className="text-xs text-slate-600 dark:text-blue-200/70 font-medium">
+                Unresponsive Leads: <strong className="text-slate-900 dark:text-white font-bold">{unresponsiveActiveCount}</strong>
+              </span>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-400/30 text-[10px] font-semibold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Meta 24h Policy Scanner Active
+              </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Real-time monitoring across Facebook Pages to identify unresponsive leads and Meta 24-hour policy windows.
+
+            <h1 className="tool-heading text-2xl sm:text-3xl font-extrabold tracking-tight mt-2 text-slate-900 dark:text-white flex items-center gap-2">
+              <Radar className="w-7 h-7 text-blue-600 dark:text-blue-400" />
+              Blaster · Lead Scanner & Recovery
+            </h1>
+            <p className="tool-desc text-sm text-slate-600 dark:text-blue-100/80 mt-1 max-w-2xl leading-relaxed">
+              Real-time monitoring across Facebook Pages to identify unresponsive leads and dispatch re-engagement before policy windows expire.
             </p>
           </div>
 
-          {/* View Mode Switcher (Standard vs Compact View) */}
-          <div className="flex items-center space-x-2 self-start sm:self-auto">
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700/80">
-              <button
-                type="button"
-                onClick={() => setViewMode("compact")}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                  viewMode === "compact"
-                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                }`}
-                title="Compact View: all 4 columns visible without scrolling"
-              >
-                <Rows className="w-3.5 h-3.5" />
-                <span>Compact View</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("standard")}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                  viewMode === "standard"
-                    ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                }`}
-                title="Standard View: expanded multi-line conversation with separate status"
-              >
-                <Columns className="w-3.5 h-3.5" />
-                <span>Standard View</span>
-              </button>
-            </div>
+          {/* SubTab / View Mode Switcher */}
+          <div className="tool-subtab-container flex items-center p-1.5 bg-white/90 dark:bg-black/40 backdrop-blur-md rounded-2xl border border-slate-200 dark:border-white/10 shrink-0 self-start md:self-auto shadow-xs gap-1.5">
+            <button
+              type="button"
+              onClick={() => setViewMode("compact")}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                viewMode === "compact"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-600/25"
+                  : "tool-subtab-btn-inactive text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5"
+              }`}
+            >
+              <Rows className="w-3.5 h-3.5" />
+              <span>Compact View</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("standard")}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                viewMode === "standard"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-600/25"
+                  : "tool-subtab-btn-inactive text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5"
+              }`}
+            >
+              <Columns className="w-3.5 h-3.5" />
+              <span>Standard View</span>
+            </button>
+            <button
+              type="button"
+              onClick={onRefreshScan}
+              disabled={isScanning}
+              className="p-1.5 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 transition cursor-pointer"
+              title="Refresh Live Scan"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? "animate-spin text-blue-500" : ""}`} />
+            </button>
           </div>
         </div>
+      </div>
+
+      {/* Control Banner: Search, Filters & Trigger Actions */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
 
         {/* Search, Filters, Exclude Expired & Scan Trigger */}
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pt-3 border-t border-slate-200 dark:border-slate-800/80">

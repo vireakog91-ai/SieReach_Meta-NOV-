@@ -18,15 +18,28 @@ import {
   Plus,
   Check,
   Zap,
+  Target,
+  Braces,
+  Sliders,
+  FileJson,
+  FlaskConical,
+  Radio,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { StatsCards } from "@/components/StatsCards";
 import { ScannerTab } from "@/components/ScannerTab";
 import { BotSetupTab } from "@/components/BotSetupTab";
 import { ReportDashboardTab } from "@/components/ReportDashboardTab";
+import { AdAttributionTab } from "@/components/AdAttributionTab";
+import { AdvanceAdsAnalyticsTab } from "@/components/AdvanceAdsAnalyticsTab";
+import { JsonBuilderTab } from "@/components/JsonBuilderTab";
+import { ResponseEngineTab } from "@/components/ResponseEngineTab";
+import { ComcentDashboardTab } from "@/components/ComcentDashboardTab";
 import { PagesManagerTab } from "@/components/PagesManagerTab";
 import { BlastLogsTab } from "@/components/BlastLogsTab";
 import { SettingsTab } from "@/components/SettingsTab";
+import { CentralHubTab } from "@/components/CentralHubTab";
+import { CdcPortalTab } from "@/components/CdcPortalTab";
 import { LiveBlastModal, LiveBlastStep } from "@/components/LiveBlastModal";
 import { CreatePortfolioModal } from "@/components/CreatePortfolioModal";
 import { AdminPinGate } from "@/components/AdminPinGate";
@@ -61,9 +74,33 @@ function getShortPageName(pageName: string, businessName?: string): string {
 }
 
 export default function SieReachDashboard() {
+  // Primary Tool Category: "hub" vs "cdc" vs "ads" vs "blaster" vs "response" vs "comcent"
+  const [toolCategory, setToolCategory] = useState<"hub" | "cdc" | "ads" | "blaster" | "response" | "comcent">("hub");
+
   const [activeTab, setActiveTab] = useState<
-    "scanner" | "bot-setup" | "reports" | "pages" | "logs" | "settings"
-  >("scanner");
+    | "central-hub"
+    | "cdc-portal"
+    | "cdc-planner"
+    | "cdc-templates"
+    | "scanner"
+    | "bot-setup"
+    | "reports"
+    | "advance-ads-analytics"
+    | "ad-attribution"
+    | "logs"
+    | "response"
+    | "json-builder"
+    | "response-rules"
+    | "response-templates"
+    | "response-simulator"
+    | "comcent"
+    | "comcent-live"
+    | "pages"
+    | "settings"
+  >("central-hub");
+  const [settingsSubTab, setSettingsSubTab] = useState<"pages" | "api" | "preferences">("pages");
+  const [adAttributionTierFilter, setAdAttributionTierFilter] = useState<string>("ALL");
+  const [adAttributionSearchQuery, setAdAttributionSearchQuery] = useState<string>("");
 
   // Authentication State (Admin PIN Access Gate)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -898,12 +935,15 @@ export default function SieReachDashboard() {
           setSelectedPageId("ALL");
         }}
         onOpenCreatePortfolio={() => setIsCreatePortfolioOpen(true)}
-        onNavigateToPages={() => setActiveTab("pages")}
+        onNavigateToPages={() => {
+          setActiveTab("settings");
+          setSettingsSubTab("pages");
+        }}
         onLockWorkspace={handleLockWorkspace}
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className={`flex-1 w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 ${toolCategory === "comcent" ? "max-w-[1680px]" : "max-w-7xl"}`}>
         {/* Blast Feedback Banner */}
         {blastFeedback && (
           <div className="bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-500/50 rounded-2xl p-4 flex items-center justify-between shadow-md dark:shadow-2xl animate-in slide-in-from-top duration-300">
@@ -1025,90 +1065,391 @@ export default function SieReachDashboard() {
           </div>
         </div>
 
-        {/* Dashboard Top Overview Stats */}
-        <StatsCards
-          totalPages={selectedPageId !== "ALL" ? 1 : scopedPages.length}
-          totalLeads={scopedScannerSummary.totalLeads}
-          awaitingCount={scopedScannerSummary.awaitingCustomer}
-          unresponsiveCount={scopedScannerSummary.unresponsiveCount}
-          urgent24hCount={scopedScannerSummary.urgent24hCount}
-          followedUpCount={scopedScannerSummary.followedUpCount}
-          thresholdHours={thresholdHours}
-          onNavigateToPages={() => setActiveTab("pages")}
-        />
+        {/* Dashboard Top Overview Stats (Blaster Mode Only) */}
+        {toolCategory === "blaster" && (
+          <StatsCards
+            totalPages={selectedPageId !== "ALL" ? 1 : scopedPages.length}
+            totalLeads={scopedScannerSummary.totalLeads}
+            awaitingCount={scopedScannerSummary.awaitingCustomer}
+            unresponsiveCount={scopedScannerSummary.unresponsiveCount}
+            urgent24hCount={scopedScannerSummary.urgent24hCount}
+            followedUpCount={scopedScannerSummary.followedUpCount}
+            thresholdHours={thresholdHours}
+            onNavigateToPages={() => {
+              setActiveTab("settings");
+              setSettingsSubTab("pages");
+            }}
+          />
+        )}
 
-        {/* Navigation Tabs Bar */}
-        <div className="flex items-center space-x-1 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto">
-          {[
-            {
-              id: "scanner",
-              label: "Inactive Lead Scanner",
-              icon: Radar,
-              badge: scopedScannerSummary.unresponsiveCount > 0 ? scopedScannerSummary.unresponsiveCount : null,
-            },
-            {
-              id: "bot-setup",
-              label: "Follow-Up Bot Setup",
-              icon: Bot,
-              badge: null,
-            },
-            {
-              id: "reports",
-              label: "Bot Performance & ROI",
-              icon: BarChart3,
-              badge: "ROI",
-            },
-            {
-              id: "pages",
-              label: "Facebook Pages",
-              icon: Layers,
-              badge: scopedPages.length,
-            },
-            {
-              id: "logs",
-              label: "Blast Delivery Logs",
-              icon: History,
-              badge: scopedLogs.length > 0 ? scopedLogs.length : null,
-            },
-            {
-              id: "settings",
-              label: "API & Webhook Settings",
-              icon: Settings,
-              badge: null,
-            },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
+        {/* Unified Executive Command Navigation Dock */}
+        <div className="bg-white/95 dark:bg-slate-900/95 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs backdrop-blur-sm flex items-center">
+          {/* Segmented Mode Selector + Active Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth flex-1 min-w-0">
+            {/* Primary Mode Pill Switcher */}
+            <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800/90 rounded-xl border border-slate-200/90 dark:border-slate-700/80 shrink-0">
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition shrink-0 ${
-                  isActive
-                    ? "bg-white text-blue-600 shadow-sm border border-slate-200 dark:bg-slate-800 dark:text-white dark:border-slate-700"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-900"
+                type="button"
+                onClick={() => {
+                  setToolCategory("hub");
+                  setActiveTab("central-hub");
+                }}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  toolCategory === "hub"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                 }`}
+                title="Central Intelligence & Sales Hub"
               >
-                <Icon className={`w-4 h-4 ${isActive ? "text-blue-600 dark:text-blue-400" : "text-slate-400 dark:text-slate-500"}`} />
-                <span>{tab.label}</span>
-                {tab.badge !== null && (
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold transition ${
-                      isActive
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-200 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
-                    }`}
-                  >
-                    {tab.badge}
-                  </span>
-                )}
+                <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
+                <span>Central Hub</span>
               </button>
-            );
-          })}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setToolCategory("cdc");
+                  setActiveTab("cdc-portal");
+                }}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  toolCategory === "cdc"
+                    ? "bg-sky-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                }`}
+                title="CDC: Channel Distribution Center (Multi-Page Content Planner)"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>CDC</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setToolCategory("ads");
+                  setActiveTab("advance-ads-analytics");
+                }}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  toolCategory === "ads"
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                }`}
+                title="Meta Ads Advisor & Attribution Intelligence"
+              >
+                <Target className="w-3.5 h-3.5" />
+                <span>Ads Advisor</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setToolCategory("blaster");
+                  if (
+                    activeTab === "central-hub" ||
+                    activeTab.startsWith("cdc-") ||
+                    activeTab === "advance-ads-analytics" ||
+                    activeTab === "ad-attribution" ||
+                    activeTab === "response-rules" ||
+                    activeTab === "response-templates" ||
+                    activeTab === "response-simulator" ||
+                    activeTab === "response" ||
+                    activeTab === "json-builder" ||
+                    activeTab === "comcent" ||
+                    activeTab === "comcent-live"
+                  ) {
+                    setActiveTab("scanner");
+                  }
+                }}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  toolCategory === "blaster"
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                }`}
+                title="Blaster Mode"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Blaster</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setToolCategory("response");
+                  if (
+                    activeTab === "central-hub" ||
+                    activeTab.startsWith("cdc-") ||
+                    activeTab === "advance-ads-analytics" ||
+                    activeTab === "ad-attribution" ||
+                    activeTab === "scanner" ||
+                    activeTab === "bot-setup" ||
+                    activeTab === "reports" ||
+                    activeTab === "logs" ||
+                    activeTab === "comcent" ||
+                    activeTab === "comcent-live"
+                  ) {
+                    setActiveTab("response-rules");
+                  }
+                }}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  toolCategory === "response"
+                    ? "bg-amber-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                }`}
+                title="Response Mode"
+              >
+                <Zap className="w-3.5 h-3.5 fill-current ml-0.5" />
+                <span>Response</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setToolCategory("comcent");
+                  setActiveTab("comcent-live");
+                }}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  toolCategory === "comcent"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                }`}
+                title="COMCENT: Customer Communication Center"
+              >
+                <Radio className="w-3.5 h-3.5" />
+                <span>COMCENT</span>
+              </button>
+            </div>
+
+            {/* Subtle Divider */}
+            <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1 shrink-0" />
+
+            {/* Dynamic Active Context Tabs for Selected Mode */}
+            {(toolCategory === "hub"
+              ? [
+                  {
+                    id: "central-hub",
+                    label: "Sales Advisor",
+                    title: "Executive Business Intelligence & Strategy",
+                    icon: Sparkles,
+                    badge: "AI",
+                  },
+                  {
+                    id: "settings",
+                    label: "Settings",
+                    title: "Facebook Pages, API & Platform Settings",
+                    icon: Settings,
+                    badge: null,
+                  },
+                ]
+              : toolCategory === "cdc"
+              ? [
+                  {
+                    id: "cdc-portal",
+                    label: "Distribution Portal",
+                    title: "Unified Multi-Page Content Publishing, Scheduling & Templates",
+                    icon: Layers,
+                    badge: "CDC",
+                  },
+                  {
+                    id: "settings",
+                    label: "Settings",
+                    title: "Facebook Pages, API & Platform Settings",
+                    icon: Settings,
+                    badge: null,
+                  },
+                ]
+              : toolCategory === "ads"
+              ? [
+                  {
+                    id: "advance-ads-analytics",
+                    label: "Creative & Sales Intelligence",
+                    title: "Advanced Photo vs Video Analytics, Copy Angles, Campaign Design & AI-Ready Export",
+                    icon: Sparkles,
+                    badge: "AI Ready",
+                  },
+                  {
+                    id: "ad-attribution",
+                    label: "Bot & Fraud Matrix",
+                    title: "Meta Ad Creative Performance & Bot Detection Matrix",
+                    icon: Target,
+                    badge: "Fraud Audit",
+                  },
+                  {
+                    id: "settings",
+                    label: "Settings",
+                    title: "Facebook Pages, API & Platform Settings",
+                    icon: Settings,
+                    badge: null,
+                  },
+                ]
+              : toolCategory === "blaster"
+              ? [
+                  {
+                    id: "scanner",
+                    label: "Lead Scanner",
+                    title: "Inactive Lead Scanner",
+                    icon: Radar,
+                    badge: scopedScannerSummary.unresponsiveCount > 0 ? scopedScannerSummary.unresponsiveCount : null,
+                  },
+                  {
+                    id: "bot-setup",
+                    label: "Bot Setup",
+                    title: "Follow-Up Bot Setup & Rules",
+                    icon: Bot,
+                    badge: null,
+                  },
+                  {
+                    id: "reports",
+                    label: "Performance & ROI",
+                    title: "Bot Performance & ROI Analytics",
+                    icon: BarChart3,
+                    badge: "ROI",
+                  },
+                  {
+                    id: "logs",
+                    label: "Blast Logs",
+                    title: "Blast Delivery & Message History Logs",
+                    icon: History,
+                    badge: scopedLogs.length > 0 ? scopedLogs.length : null,
+                  },
+                  {
+                    id: "settings",
+                    label: "Settings",
+                    title: "Facebook Pages, API & Platform Settings",
+                    icon: Settings,
+                    badge: null,
+                  },
+                ]
+              : toolCategory === "response"
+              ? [
+                  {
+                    id: "response-rules",
+                    label: "Inbound Rules",
+                    title: "Keywords, Attachments & Anti-Spam Trigger Rules",
+                    icon: Sliders,
+                    badge: "Active",
+                  },
+                  {
+                    id: "response-templates",
+                    label: "JSON Templates",
+                    title: "Multi-Template Interactive JSON Library",
+                    icon: FileJson,
+                    badge: "Flows",
+                  },
+                  {
+                    id: "response-simulator",
+                    label: "Flow Simulator",
+                    title: "Live Chat Interactive Sandbox Simulator",
+                    icon: FlaskConical,
+                    badge: "Live",
+                  },
+                  {
+                    id: "settings",
+                    label: "Settings",
+                    title: "Facebook Pages, API & Platform Settings",
+                    icon: Settings,
+                    badge: null,
+                  },
+                ]
+              : [
+                  {
+                    id: "comcent-live",
+                    label: "Live Command Stream",
+                    title: "Live Customer Communication & House Dispatch",
+                    icon: Radio,
+                    badge: "Live",
+                  },
+                  {
+                    id: "settings",
+                    label: "Settings",
+                    title: "Facebook Pages, API & Platform Settings",
+                    icon: Settings,
+                    badge: null,
+                  },
+                ]
+            ).map((tab) => {
+              const Icon = tab.icon;
+              const isActive =
+                activeTab === tab.id ||
+                (tab.id === "comcent-live" && activeTab === "comcent") ||
+                (tab.id === "settings" && activeTab === "pages") ||
+                (tab.id === "response-rules" && activeTab === "response") ||
+                (tab.id === "response-templates" && activeTab === "json-builder");
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  title={tab.title}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs transition shrink-0 cursor-pointer ${
+                    isActive
+                      ? toolCategory === "hub"
+                        ? "bg-emerald-600 text-white font-bold shadow-xs dark:bg-emerald-600"
+                        : toolCategory === "ads"
+                        ? "bg-purple-600 text-white font-bold shadow-xs dark:bg-purple-600"
+                        : toolCategory === "response"
+                        ? "bg-amber-600 text-white font-bold shadow-xs dark:bg-amber-600"
+                        : toolCategory === "comcent"
+                        ? "bg-indigo-600 text-white font-bold shadow-xs dark:bg-indigo-600"
+                        : "bg-blue-600 text-white font-bold shadow-xs dark:bg-blue-600"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/60 font-medium"
+                  }`}
+                >
+                  <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-white" : "text-slate-400 dark:text-slate-500"}`} />
+                  <span className="whitespace-nowrap">{tab.label}</span>
+                  {tab.badge !== null && (
+                    <span
+                      className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold transition shrink-0 ${
+                        isActive
+                          ? "bg-white/20 text-white"
+                          : "bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
+                      }`}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Tab Content Rendering */}
         <div className="pt-2">
+          {toolCategory === "hub" && activeTab === "central-hub" && (
+            <CentralHubTab
+              pages={scopedPages}
+              selectedPageId={selectedPageId}
+              onSelectPageId={setSelectedPageId}
+              activeBusiness={selectedBusiness}
+              isMockMode={isMockMode}
+              onNavigateToSettings={(sub) => {
+                setSettingsSubTab(sub);
+                setActiveTab("settings");
+              }}
+              onTriggerBlaster={() => {
+                setToolCategory("blaster");
+                setActiveTab("scanner");
+              }}
+              onNavigateToResponseRules={() => {
+                setToolCategory("response");
+                setActiveTab("response-rules");
+              }}
+              onNavigateToComcent={() => {
+                setToolCategory("comcent");
+                setActiveTab("comcent-live");
+              }}
+              onNavigateToAdAttribution={(options) => {
+                setAdAttributionTierFilter(options?.tier || "ALL");
+                setAdAttributionSearchQuery(options?.search || "");
+                setToolCategory("ads");
+                setActiveTab("ad-attribution");
+              }}
+              onNavigateToCdc={() => {
+                setToolCategory("cdc");
+                setActiveTab("cdc-portal");
+              }}
+            />
+          )}
+
           {activeTab === "scanner" && (
             <ScannerTab
               leads={scopedScannerSummary.leads}
@@ -1138,22 +1479,64 @@ export default function SieReachDashboard() {
             <ReportDashboardTab pages={scopedPages} />
           )}
 
-          {activeTab === "pages" && (
-            <PagesManagerTab
+          {toolCategory === "ads" && activeTab === "advance-ads-analytics" && (
+            <AdvanceAdsAnalyticsTab
               pages={scopedPages}
-              campaigns={campaigns}
-              portfolios={portfolios}
               activeBusiness={selectedBusiness}
-              onSelectBusiness={(biz) => {
-                setSelectedBusiness(biz);
-                setSelectedPageId("ALL");
+              selectedPageId={selectedPageId}
+            />
+          )}
+
+          {toolCategory === "ads" && activeTab === "ad-attribution" && (
+            <AdAttributionTab
+              pages={scopedPages}
+              activeBusiness={selectedBusiness}
+              selectedPageId={selectedPageId}
+              initialTierFilter={adAttributionTierFilter}
+              initialSearchQuery={adAttributionSearchQuery}
+              onTriggerBlast={handleTriggerBlast}
+            />
+          )}
+
+          {(activeTab === "response" ||
+            activeTab === "json-builder" ||
+            activeTab === "response-rules" ||
+            activeTab === "response-templates" ||
+            activeTab === "response-simulator") && (
+            <ResponseEngineTab
+              pages={scopedPages}
+              activeBusiness={selectedBusiness}
+              activeSubTab={
+                activeTab === "response-templates" || activeTab === "json-builder"
+                  ? "templates"
+                  : activeTab === "response-simulator"
+                  ? "simulator"
+                  : "rules"
+              }
+              onSubTabChange={(subTab) => {
+                setActiveTab(`response-${subTab}` as any);
               }}
-              onOpenCreatePortfolio={() => setIsCreatePortfolioOpen(true)}
-              onAddPage={handleAddPage}
-              onTogglePageActive={handleTogglePageActive}
-              onDeletePage={handleDeletePage}
-              onSyncProfile={handleSyncProfile}
-              onTriggerBlastForPage={handleConfirmTriggerPage}
+            />
+          )}
+
+          {(activeTab === "comcent" || activeTab === "comcent-live") && (
+            <ComcentDashboardTab
+              pages={scopedPages}
+              activeBusiness={selectedBusiness}
+              onNavigateToResponseTemplates={() => {
+                setToolCategory("response");
+                setActiveTab("response-templates");
+              }}
+            />
+          )}
+
+          {(toolCategory === "cdc" ||
+            activeTab === "cdc-portal" ||
+            activeTab === "cdc-planner" ||
+            activeTab === "cdc-templates") && (
+            <CdcPortalTab
+              pages={scopedPages}
+              activeBusiness={selectedBusiness}
               isMockMode={isMockMode}
             />
           )}
@@ -1168,10 +1551,26 @@ export default function SieReachDashboard() {
             />
           )}
 
-          {activeTab === "settings" && (
+          {(activeTab === "settings" || activeTab === "pages") && (
             <SettingsTab
               isMockMode={isMockMode}
               onToggleMockMode={handleToggleMockMode}
+              pages={scopedPages}
+              campaigns={campaigns}
+              portfolios={portfolios}
+              activeBusiness={selectedBusiness}
+              onSelectBusiness={(biz) => {
+                setSelectedBusiness(biz);
+                setSelectedPageId("ALL");
+              }}
+              onOpenCreatePortfolio={() => setIsCreatePortfolioOpen(true)}
+              onAddPage={handleAddPage}
+              onTogglePageActive={handleTogglePageActive}
+              onDeletePage={handleDeletePage}
+              onSyncProfile={handleSyncProfile}
+              onTriggerBlastForPage={handleConfirmTriggerPage}
+              activeSubTab={settingsSubTab}
+              onSubTabChange={(sub) => setSettingsSubTab(sub)}
             />
           )}
         </div>

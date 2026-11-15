@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { INITIAL_PAGES, INITIAL_LEADS } from "../src/lib/mockData";
+import { INITIAL_PAGES, INITIAL_LEADS, INITIAL_AD_CREATIVE_INSIGHTS } from "../src/lib/mockData";
 
 const prisma = new PrismaClient();
 
@@ -8,6 +8,7 @@ async function main() {
 
   // 1. Clear existing data
   await prisma.blastLog.deleteMany({});
+  await prisma.adCreativeInsight.deleteMany({});
   await prisma.followUpCampaign.deleteMany({});
   await prisma.leadConversation.deleteMany({});
   await prisma.facebookPage.deleteMany({});
@@ -119,12 +120,21 @@ async function main() {
         lastAgentMessage: lead.lastAgentMessage,
         lastAgentMessageAt: new Date(now - agentMsAgo),
         status: lead.status,
-        followUpCount: lead.status === "FOLLOWED_UP" ? 1 : 0,
+        followUpCount: lead.followUpCount !== undefined ? lead.followUpCount : (lead.status === "FOLLOWED_UP" ? 1 : 0),
         lastFollowedUpAt:
           lead.status === "FOLLOWED_UP" ? new Date(now - 12 * 60 * 60 * 1000) : null,
+        repliedAfterStep: lead.repliedAfterStep || null,
+        isConverted: Boolean(lead.isConverted),
+        orderValue: lead.orderValue || null,
       },
     });
   }
+
+  // 4.5 Seed Initial Ad Creative Insights (Advance Ads Analytics Taxonomy)
+  console.log(`Seeding ${INITIAL_AD_CREATIVE_INSIGHTS.length} Ad Creative Insights...`);
+  await prisma.adCreativeInsight.createMany({
+    data: INITIAL_AD_CREATIVE_INSIGHTS,
+  });
 
   // 5. Initial System Settings
   await prisma.systemSetting.createMany({

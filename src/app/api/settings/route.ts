@@ -25,6 +25,13 @@ export async function GET(req: NextRequest) {
     const rawSecret = settings["META_APP_SECRET"] ?? "";
     const maskedSecret = rawSecret ? "••••••••••••••••" : "";
 
+    const rawGeminiKey = settings["GEMINI_API_KEY"] || process.env.GEMINI_API_KEY || "";
+    const maskedGeminiKey = rawGeminiKey
+      ? rawGeminiKey.length > 10
+        ? rawGeminiKey.slice(0, 6) + "••••••••" + rawGeminiKey.slice(-4)
+        : "••••••••"
+      : "";
+
     return NextResponse.json(
       {
         success: true,
@@ -35,6 +42,8 @@ export async function GET(req: NextRequest) {
           HAS_APP_SECRET: Boolean(rawSecret),
           WEBHOOK_VERIFY_TOKEN: settings["WEBHOOK_VERIFY_TOKEN"] ?? "sielab_reach_verify_token_2026",
           REPORT_AOV: settings["REPORT_AOV"] ?? "45",
+          GEMINI_API_KEY: maskedGeminiKey,
+          HAS_GEMINI_KEY: Boolean(rawGeminiKey),
         },
       },
       { headers: noCacheHeaders }
@@ -60,12 +69,16 @@ export async function POST(req: NextRequest) {
       "META_APP_SECRET",
       "WEBHOOK_VERIFY_TOKEN",
       "REPORT_AOV",
+      "GEMINI_API_KEY",
     ];
 
     for (const key of allowedKeys) {
       if (body[key] !== undefined) {
-        // If user submitted the masked placeholder for META_APP_SECRET, skip updating it
-        if (key === "META_APP_SECRET" && String(body[key]).includes("••")) {
+        // If user submitted the masked placeholder, skip updating it
+        if (
+          (key === "META_APP_SECRET" || key === "GEMINI_API_KEY") &&
+          String(body[key]).includes("••")
+        ) {
           continue;
         }
 
@@ -85,4 +98,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

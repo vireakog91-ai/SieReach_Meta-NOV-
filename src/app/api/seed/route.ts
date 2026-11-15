@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { INITIAL_PAGES, INITIAL_LEADS } from "@/lib/mockData";
+import { INITIAL_PAGES, INITIAL_LEADS, INITIAL_AD_CREATIVE_INSIGHTS } from "@/lib/mockData";
 import { requireAdminAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -10,6 +10,7 @@ export async function POST(req: NextRequest) {
   try {
     // Clear and reset data
     await prisma.blastLog.deleteMany({});
+    await prisma.adCreativeInsight.deleteMany({});
     await prisma.leadConversation.deleteMany({});
     await prisma.followUpCampaign.deleteMany({});
     await prisma.facebookPage.deleteMany({});
@@ -144,6 +145,8 @@ export async function POST(req: NextRequest) {
           secondFollowedUpAt,
           repliedAt,
           repliedAfterStep: lead.repliedAfterStep || null,
+          isConverted: Boolean(lead.isConverted),
+          orderValue: lead.orderValue || null,
         },
       });
 
@@ -165,6 +168,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (secondFollowedUpAt) {
+        const isBotFailure = lead.psid === "psid_bot_01";
         await prisma.blastLog.create({
           data: {
             pageId: lead.pageId,
@@ -172,7 +176,8 @@ export async function POST(req: NextRequest) {
             recipientPsid: lead.psid,
             recipientName: lead.customerName,
             messageSent: `Step 2 Final Follow-Up: Exclusive VIP voucher for you ${lead.customerName}!`,
-            status: "DELIVERED",
+            status: isBotFailure ? "FAILED" : "DELIVERED",
+            errorMessage: isBotFailure ? "Meta Graph API Error #551: This person is not available on Messenger right now (Deactivated/Fake Account)." : null,
             step: 2,
             sentAt: secondFollowedUpAt,
             respondedAt: lead.repliedAfterStep === 2 ? repliedAt : null,
@@ -180,6 +185,11 @@ export async function POST(req: NextRequest) {
         });
       }
     }
+
+    // Seed Ad Creative Insights taxonomy
+    await prisma.adCreativeInsight.createMany({
+      data: INITIAL_AD_CREATIVE_INSIGHTS,
+    });
 
     return NextResponse.json({
       success: true,
