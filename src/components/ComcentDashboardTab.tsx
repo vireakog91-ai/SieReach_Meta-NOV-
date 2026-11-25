@@ -40,6 +40,10 @@ import {
   PanelRightOpen,
   ChevronRight,
   UserCheck,
+  Phone,
+  ShoppingBag,
+  Copy,
+  MapPin,
 } from "lucide-react";
 import { HouseItem, DEFAULT_HOUSES } from "@/app/api/houses/route";
 import { ComcentConversationItem, ComcentMessageItem, isConversationTakenOver } from "@/app/api/comcent/conversations/route";
@@ -78,8 +82,16 @@ export function ComcentDashboardTab({
   const selectedConvIdRef = useRef<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "attention" | "qualified" | "unread">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "phones" | "voices" | "attention" | "qualified" | "unread">("all");
   const [showSimulateMenu, setShowSimulateMenu] = useState(false);
+
+  // Advance Scan Convert & Triage Modal State
+  const [convertModalConv, setConvertModalConv] = useState<ComcentConversationItem | null>(null);
+  const [orderValueInput, setOrderValueInput] = useState<string>("45.0");
+  const [addressInput, setAddressInput] = useState<string>("");
+  const [notesInput, setNotesInput] = useState<string>("");
+  const [isSubmittingStatus, setIsSubmittingStatus] = useState<boolean>(false);
+  const [copiedPhoneId, setCopiedPhoneId] = useState<string | null>(null);
 
   // Templates from Response State (for 1-click Pre-setup dispatch & 3rd Column Library)
   const [templates, setTemplates] = useState<ResponseTemplateItem[]>(DEFAULT_TEMPLATES);
@@ -227,10 +239,30 @@ export function ComcentDashboardTab({
   // 2. Passive Live View Interval (Auto-update every 5 seconds - NEVER forces auto-scroll or selection reset)
   useEffect(() => {
     if (!isLiveActive) return;
+
     const interval = setInterval(() => {
+      // PAGE VISIBILITY GUARD: Skip polling when tab is hidden
+      if (typeof document !== "undefined" && document.hidden) return;
       fetchConversations(true);
     }, 5000);
-    return () => clearInterval(interval);
+
+    // Refresh immediately when returning to the tab
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && !document.hidden && isLiveActive) {
+        fetchConversations(true);
+      }
+    };
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
+    };
   }, [isLiveActive, selectedHouseId]);
 
   // Position inner chat container to bottom cleanly ONLY when switching conversations (no window scroll)
@@ -261,7 +293,11 @@ export function ComcentDashboardTab({
     let list = [...conversations];
 
     // Status / Qualification Tab filter
-    if (statusFilter === "attention") {
+    if (statusFilter === "phones") {
+      list = list.filter((c) => Boolean(c.advanceScan?.detectedPhone));
+    } else if (statusFilter === "voices") {
+      list = list.filter((c) => (c.advanceScan?.voiceCount ?? 0) >= 2);
+    } else if (statusFilter === "attention") {
       list = list.filter((c) => c.qualification.needsCommander && c.status !== "REPLIED");
     } else if (statusFilter === "qualified") {
       list = list.filter((c) => c.qualification.isQualified);
@@ -277,7 +313,8 @@ export function ComcentDashboardTab({
           c.customerName.toLowerCase().includes(q) ||
           c.lastMessage.toLowerCase().includes(q) ||
           c.pageName.toLowerCase().includes(q) ||
-          c.qualification.badgeText.toLowerCase().includes(q)
+          c.qualification.badgeText.toLowerCase().includes(q) ||
+          c.advanceScan?.detectedPhone?.toLowerCase().includes(q)
       );
     }
 
@@ -507,6 +544,70 @@ export function ComcentDashboardTab({
       console.error("Failed to update takeover status:", err);
     } finally {
       setIsUpdatingTakeover(false);
+    }
+  };
+
+  // 5.5 Action: 1-Click Qualify & Convert integrated with Advance Scan
+  const handleQualifyInComcent = async (conv: ComcentConversationItem) => {
+    setIsSubmittingStatus(true);
+    try {
+      const res = await fetch("/api/comcent/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId: conv.id,
+          action: "mark_qualified",
+        }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.conversations)) {
+        setConversations(data.conversations);
+      }
+      setLiveToast({
+        title: "★ Lead Qualified",
+        subtitle: `Marked "${conv.customerName}" as verified prospect.`,
+      });
+      setTimeout(() => setLiveToast(null), 3000);
+    } catch (err) {
+      console.error("Failed to qualify lead in comcent:", err);
+    } finally {
+      setIsSubmittingStatus(false);
+    }
+  };
+
+  const handleConvertInComcent = async (
+    conv: ComcentConversationItem,
+    orderVal: number,
+    address?: string,
+    notes?: string
+  ) => {
+    setIsSubmittingStatus(true);
+    try {
+      const res = await fetch("/api/comcent/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId: conv.id,
+          action: "mark_converted",
+          orderValue: orderVal,
+          customerAddress: address,
+          notes,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.conversations)) {
+        setConversations(data.conversations);
+      }
+      setConvertModalConv(null);
+      setLiveToast({
+        title: "🎉 Order Converted!",
+        subtitle: `Recorded $${orderVal} purchase for ${conv.customerName}.`,
+      });
+      setTimeout(() => setLiveToast(null), 3500);
+    } catch (err) {
+      console.error("Failed to convert lead in comcent:", err);
+    } finally {
+      setIsSubmittingStatus(false);
     }
   };
 
@@ -1134,6 +1235,20 @@ export function ComcentDashboardTab({
                     </span>
                     <span className="text-[10px] text-slate-400 truncate">"Do you provide free delivery...?"</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSimulateInbound("ខ្ញុំយកមួយហ្នឹងបង លេខទូរស័ព្ទ 012 889 977 នៅផ្ទះលេខ 23 ផ្លូវ 123 ភ្នំពេញ (Confirm Purchase)");
+                      setShowSimulateMenu(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-800 dark:text-amber-200 cursor-pointer flex flex-col border border-amber-200/50 dark:border-amber-800/50 rounded-xl mt-1"
+                  >
+                    <span className="font-bold flex items-center gap-1.5 text-amber-700 dark:text-amber-300">
+                      <span>📱</span>
+                      <span>Advance Scan: Phone Purchase</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 truncate font-mono">"012 889 977 - ភ្នំពេញ (Confirm)"</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -1180,6 +1295,16 @@ export function ComcentDashboardTab({
           <div className="flex items-center gap-1 overflow-x-auto [scrollbar-width:none] shrink-0 pb-1.5">
             {[
               { id: "all", label: "All Inbound", count: conversations.length },
+              {
+                id: "phones",
+                label: "📱 Phones",
+                count: conversations.filter((c) => Boolean(c.advanceScan?.detectedPhone)).length,
+              },
+              {
+                id: "voices",
+                label: "🎙️ Voices",
+                count: conversations.filter((c) => (c.advanceScan?.voiceCount ?? 0) >= 2).length,
+              },
               {
                 id: "attention",
                 label: "Needs Reply",
@@ -1286,8 +1411,8 @@ export function ComcentDashboardTab({
                       {conv.lastMessage}
                     </p>
 
-                    {/* Inbound Rules Qualification Badge */}
-                    <div className="flex items-center space-x-1.5 pt-0.5">
+                    {/* Inbound Rules & Advance Scan Badges */}
+                    <div className="flex flex-wrap items-center gap-1 pt-0.5">
                       {isConversationTakenOver(conv) ? (
                         <span className="text-[9px] px-2 py-0.5 rounded-md font-bold border truncate bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700 flex items-center gap-1 shadow-2xs">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
@@ -1311,6 +1436,29 @@ export function ComcentDashboardTab({
                           }`}
                         >
                           {conv.qualification.badgeText}
+                        </span>
+                      )}
+
+                      {/* Advance Scan: Converted status */}
+                      {conv.advanceScan?.isConverted && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-md font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 flex items-center gap-0.5">
+                          <span>🎉 ${conv.advanceScan.convertedAmount ?? 0}</span>
+                        </span>
+                      )}
+
+                      {/* Advance Scan: Detected Phone */}
+                      {conv.advanceScan?.detectedPhone && !conv.advanceScan.isConverted && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-md font-bold bg-amber-50 dark:bg-amber-950/80 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-700 flex items-center gap-1 font-mono">
+                          <Phone className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
+                          <span>{conv.advanceScan.detectedPhone}</span>
+                        </span>
+                      )}
+
+                      {/* Advance Scan: Multi Voices */}
+                      {conv.advanceScan?.voiceCount && conv.advanceScan.voiceCount >= 2 && !conv.advanceScan.isConverted && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-md font-bold bg-purple-50 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-700 flex items-center gap-1 font-mono">
+                          <Mic className="w-2.5 h-2.5 text-purple-600 dark:text-purple-400" />
+                          <span>{conv.advanceScan.voiceCount} voices</span>
                         </span>
                       )}
                     </div>
@@ -1584,6 +1732,117 @@ export function ComcentDashboardTab({
                   </button>
                 </div>
               </div>
+
+              {/* Advance Scan & Instant Purchase Action Bar */}
+              {(activeConversation.advanceScan?.detectedPhone ||
+                (activeConversation.advanceScan?.voiceCount && activeConversation.advanceScan.voiceCount >= 2) ||
+                activeConversation.advanceScan?.isQualified ||
+                activeConversation.advanceScan?.isConverted) && (
+                <div className="px-3.5 py-2 bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-emerald-500/10 dark:from-amber-950/40 dark:via-indigo-950/40 dark:to-emerald-950/40 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0 animate-in fade-in duration-200">
+                  <div className="flex items-center flex-wrap gap-2 min-w-0">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1 shrink-0">
+                      <Sparkles className="w-3 h-3 text-amber-500" />
+                      <span>Advance Scan</span>
+                    </span>
+
+                    {/* Detected Customer Mobile Phone */}
+                    {activeConversation.advanceScan?.detectedPhone && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-900 dark:text-amber-200 font-mono font-bold text-xs shadow-2xs">
+                        <Phone className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                        <span>{activeConversation.advanceScan.detectedPhone}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (activeConversation.advanceScan?.detectedPhone) {
+                              navigator.clipboard.writeText(activeConversation.advanceScan.detectedPhone);
+                              setCopiedPhoneId(activeConversation.id);
+                              setTimeout(() => setCopiedPhoneId(null), 2000);
+                            }
+                          }}
+                          className="ml-1 p-0.5 hover:bg-amber-500/20 rounded cursor-pointer transition text-amber-700 dark:text-amber-300"
+                          title="Copy Phone Number"
+                        >
+                          {copiedPhoneId === activeConversation.id ? (
+                            <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                          ) : (
+                            <Copy className="w-3 h-3" />
+                          )}
+                        </button>
+                        <a
+                          href={`tel:${activeConversation.advanceScan.detectedPhone}`}
+                          className="ml-0.5 px-1.5 py-0.5 rounded text-[10px] bg-amber-600 hover:bg-amber-500 text-white transition font-sans font-semibold cursor-pointer"
+                        >
+                          Call
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Customer Delivery Address */}
+                    {activeConversation.advanceScan?.customerAddress && (
+                      <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] max-w-[200px] truncate" title={activeConversation.advanceScan.customerAddress}>
+                        <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
+                        <span className="truncate">{activeConversation.advanceScan.customerAddress}</span>
+                      </div>
+                    )}
+
+                    {/* Multi-Voice Detection */}
+                    {activeConversation.advanceScan?.voiceCount && activeConversation.advanceScan.voiceCount >= 2 && (
+                      <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-900 dark:text-purple-200 text-[11px] font-semibold">
+                        <Mic className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                        <span>{activeConversation.advanceScan.voiceCount} Voice Notes</span>
+                      </div>
+                    )}
+
+                    {/* Status Pill */}
+                    {activeConversation.advanceScan?.isConverted ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                        <span>🎉 Converted (${activeConversation.advanceScan.convertedAmount ?? 0})</span>
+                      </span>
+                    ) : activeConversation.advanceScan?.isQualified ? (
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-800 dark:text-indigo-300 border border-indigo-500/40 text-[11px] font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                        <span>Qualified Prospect</span>
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {/* 1-Click Action Buttons: Qualify & Convert Purchase */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {!activeConversation.advanceScan?.isQualified && !activeConversation.advanceScan?.isConverted && (
+                      <button
+                        type="button"
+                        onClick={() => handleQualifyInComcent(activeConversation)}
+                        disabled={isSubmittingStatus}
+                        className="px-2.5 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1 cursor-pointer transition shadow-2xs"
+                        title="Mark chat as Qualified prospect in Advance Scan & COMCENT"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Qualify</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrderValueInput(activeConversation.advanceScan?.convertedAmount ? String(activeConversation.advanceScan.convertedAmount) : "45.0");
+                        setAddressInput(activeConversation.advanceScan?.customerAddress || "");
+                        setNotesInput(activeConversation.advanceScan?.notes || "");
+                        setConvertModalConv(activeConversation);
+                      }}
+                      disabled={isSubmittingStatus}
+                      className={`px-3 py-1 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer transition shadow-2xs ${
+                        activeConversation.advanceScan?.isConverted
+                          ? "bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700"
+                          : "bg-emerald-600 hover:bg-emerald-500 text-white ring-2 ring-emerald-500/20"
+                      }`}
+                      title="Record customer purchase & mark Converted"
+                    >
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                      <span>{activeConversation.advanceScan?.isConverted ? "Edit Order ($)" : "Convert ($)"}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Chat Messages Stream Wrapper */}
               <div className="relative flex-1 min-h-0 flex flex-col">
@@ -2261,6 +2520,139 @@ export function ComcentDashboardTab({
                   className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white transition shadow-sm cursor-pointer"
                 >
                   {isSavingHouse ? "Saving..." : "Create House"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 1-CLICK CONVERT PURCHASE & TRIAGE MODAL */}
+      {convertModalConv && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                  <ShoppingBag className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                    Convert Customer Order
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {convertModalConv.customerName} • {convertModalConv.pageName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConvertModalConv(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Customer Details Summary */}
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+              {convertModalConv.advanceScan?.detectedPhone && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium flex items-center gap-1">
+                    <Phone className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Customer Mobile:</span>
+                  </span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-white">
+                    {convertModalConv.advanceScan.detectedPhone}
+                  </span>
+                </div>
+              )}
+              {convertModalConv.advanceScan?.scanCategory && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Scan Detection:</span>
+                  <span className="font-semibold text-indigo-600 dark:text-indigo-400 font-mono text-[10px]">
+                    {convertModalConv.advanceScan.scanCategory}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const val = parseFloat(orderValueInput);
+                handleConvertInComcent(
+                  convertModalConv,
+                  isNaN(val) ? 0 : val,
+                  addressInput.trim() || undefined,
+                  notesInput.trim() || undefined
+                );
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Order / Purchase Amount ($ USD)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={orderValueInput}
+                    onChange={(e) => setOrderValueInput(e.target.value)}
+                    placeholder="45.00"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-7 pr-3 py-2 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Delivery Address / Drop-off Location
+                </label>
+                <div className="relative">
+                  <MapPin className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={addressInput}
+                    onChange={(e) => setAddressInput(e.target.value)}
+                    placeholder="e.g. St. 2004, Sen Sok, Phnom Penh"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Order Notes / Product SKU (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={notesInput}
+                  onChange={(e) => setNotesInput(e.target.value)}
+                  placeholder="e.g. Size L, Black color, COD payment on delivery..."
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setConvertModalConv(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingStatus}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <span>{isSubmittingStatus ? "Recording..." : "Confirm & Convert Lead"}</span>
                 </button>
               </div>
             </form>

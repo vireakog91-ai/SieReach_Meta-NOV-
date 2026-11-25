@@ -5,6 +5,7 @@ import {
   publishFacebookPostComment,
   sendFacebookPrivateReply,
 } from "@/lib/facebook";
+import { evaluateAdvanceScan, isVoiceMessage } from "@/lib/advanceScan";
 
 /**
  * Facebook Messenger Webhook verification endpoint (GET)
@@ -118,6 +119,21 @@ export async function POST(req: NextRequest) {
                 (referral?.ad_id ? `Meta Ad #${referral.ad_id}` : referral?.ref) ||
                 null;
 
+              // Evaluate Advance Scan: Phone Detection & Multi-Voice triggers
+              const isVoice = isVoiceMessage(text) || event.message.attachments?.some((a: any) => a.type === "audio");
+              const currentVoiceCount = (existingLead?.voiceCount || 0) + (isVoice ? 1 : 0);
+              const currentTextCount = (existingLead?.textCount || 0) + (!isVoice ? 1 : 0);
+              const advanceScanResult = evaluateAdvanceScan(
+                [{ sender: "customer", text, attachmentType: isVoice ? "audio" : "none" }],
+                {
+                  lastCustomerMessage: text,
+                  detectedPhone: existingLead?.detectedPhone,
+                  voiceCount: currentVoiceCount,
+                  textCount: currentTextCount,
+                  orderValue: existingLead?.orderValue,
+                }
+              );
+
               // Update lead conversation
               await prisma.leadConversation.upsert({
                 where: {
@@ -130,6 +146,13 @@ export async function POST(req: NextRequest) {
                   lastCustomerMessage: text,
                   lastCustomerMessageAt: now,
                   status: "REPLIED",
+                  detectedPhone: advanceScanResult.detectedPhone,
+                  detectedPhoneSnippet: advanceScanResult.detectedPhoneSnippet,
+                  voiceCount: currentVoiceCount,
+                  textCount: currentTextCount,
+                  scanCategory: advanceScanResult.scanCategory,
+                  scanFlags: JSON.stringify(advanceScanResult.scanFlags),
+                  advanceScanAt: now,
                   ...(extractedAdSource && !existingLead?.adSource ? { adSource: extractedAdSource } : {}),
                   ...(wasFollowedUp ? { repliedAt: now, repliedAfterStep: stepReplied } : {}),
                 },
@@ -143,6 +166,13 @@ export async function POST(req: NextRequest) {
                   lastAgentMessage: "Awaiting initial agent response",
                   lastAgentMessageAt: now,
                   status: "AWAITING_CUSTOMER",
+                  detectedPhone: advanceScanResult.detectedPhone,
+                  detectedPhoneSnippet: advanceScanResult.detectedPhoneSnippet,
+                  voiceCount: currentVoiceCount,
+                  textCount: currentTextCount,
+                  scanCategory: advanceScanResult.scanCategory,
+                  scanFlags: JSON.stringify(advanceScanResult.scanFlags),
+                  advanceScanAt: now,
                 },
               });
 

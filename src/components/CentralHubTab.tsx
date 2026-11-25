@@ -26,6 +26,7 @@ import {
   Check,
   ShieldAlert,
   ChevronDown,
+  Radar,
 } from "lucide-react";
 import { HubSummaryResult, HubActionCard, HourlyResponseMetric, PageHealthSummary } from "@/lib/advisorEngine";
 
@@ -40,6 +41,7 @@ interface CentralHubTabProps {
   onNavigateToResponseRules?: (rulePreset?: { name: string; template: string }) => void;
   onNavigateToComcent?: () => void;
   onNavigateToAdAttribution?: (options?: { tier?: string; search?: string }) => void;
+  onNavigateToAdvanceScan?: () => void;
   onNavigateToCdc?: () => void;
 }
 
@@ -54,6 +56,7 @@ export function CentralHubTab({
   onNavigateToResponseRules,
   onNavigateToComcent,
   onNavigateToAdAttribution,
+  onNavigateToAdvanceScan,
   onNavigateToCdc,
 }: CentralHubTabProps) {
   const [timeRange, setTimeRange] = useState<"7d" | "30d" | "all">("all");
@@ -384,6 +387,35 @@ export function CentralHubTab({
           </button>
         </div>
       )}
+
+      {/* Advance Scan Incoming Triage Strip */}
+      <div className="bg-gradient-to-r from-teal-50 via-emerald-50 to-cyan-50 dark:from-teal-950/40 dark:via-emerald-950/30 dark:to-cyan-950/30 border border-teal-200/80 dark:border-teal-800/60 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs">
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+            <Radar className="w-4 h-4 animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="font-extrabold text-slate-900 dark:text-white">
+                Chat Advance Scan Active
+              </span>
+              <span className="px-1.5 py-0.2 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-900/60 dark:text-teal-300 font-bold text-[10px]">
+                Inbound Triage
+              </span>
+            </div>
+            <p className="text-slate-600 dark:text-slate-300 text-[11px] mt-0.5">
+              Automated mobile phone detection for purchase confirmations & multi-voice inquiry classification.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={onNavigateToAdvanceScan}
+          className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-xs transition shrink-0 cursor-pointer"
+        >
+          <span>Open Advance Scan</span>
+          <ArrowUpRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
 
       {/* Multi-Page Health Comparison Strip (Rendered when "All Pages" is selected) */}
       {selectedPageId === "ALL" && summaryData?.pageComparisons && summaryData.pageComparisons.length > 0 && (

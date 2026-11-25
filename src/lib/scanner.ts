@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { evaluateAdvanceScan } from "./advanceScan";
 
 export interface AnalyzedLead {
   id: string;
@@ -174,6 +175,23 @@ export async function syncLiveConversations(pageIdFilter?: string | null) {
             status = "AWAITING_CUSTOMER";
           }
 
+          // Advance Scan: evaluate mobile phone numbers and audio notes
+          const custMessages = messages.filter((m: any) => m.from?.id === customer.id);
+          const advanceScanResult = evaluateAdvanceScan(
+            custMessages.map((m: any) => ({
+              sender: "customer",
+              text: formatMessageContent(m, ""),
+              attachmentType: m.attachments?.data?.[0]?.mime_type?.startsWith("audio/") ? "audio" : "none",
+            })),
+            {
+              lastCustomerMessage: effectiveCustText,
+              detectedPhone: existingLead?.detectedPhone,
+              voiceCount: existingLead?.voiceCount,
+              textCount: existingLead?.textCount,
+              orderValue: existingLead?.orderValue,
+            }
+          );
+
           await prisma.leadConversation.upsert({
             where: {
               pageId_psid: {
@@ -188,6 +206,13 @@ export async function syncLiveConversations(pageIdFilter?: string | null) {
               lastAgentMessage: agentText,
               lastAgentMessageAt: agentTime || effectiveCustTime,
               status,
+              detectedPhone: advanceScanResult.detectedPhone,
+              detectedPhoneSnippet: advanceScanResult.detectedPhoneSnippet,
+              voiceCount: advanceScanResult.voiceCount,
+              textCount: advanceScanResult.textCount,
+              scanCategory: advanceScanResult.scanCategory,
+              scanFlags: JSON.stringify(advanceScanResult.scanFlags),
+              advanceScanAt: new Date(),
               ...(customerHasReplied && wasFollowedUp ? { repliedAt: effectiveCustTime, repliedAfterStep: stepReplied } : {}),
             },
             create: {
@@ -199,6 +224,13 @@ export async function syncLiveConversations(pageIdFilter?: string | null) {
               lastAgentMessage: agentText,
               lastAgentMessageAt: agentTime || effectiveCustTime,
               status,
+              detectedPhone: advanceScanResult.detectedPhone,
+              detectedPhoneSnippet: advanceScanResult.detectedPhoneSnippet,
+              voiceCount: advanceScanResult.voiceCount,
+              textCount: advanceScanResult.textCount,
+              scanCategory: advanceScanResult.scanCategory,
+              scanFlags: JSON.stringify(advanceScanResult.scanFlags),
+              advanceScanAt: new Date(),
               ...(customerHasReplied && wasFollowedUp ? { repliedAt: effectiveCustTime, repliedAfterStep: stepReplied } : {}),
             },
           });

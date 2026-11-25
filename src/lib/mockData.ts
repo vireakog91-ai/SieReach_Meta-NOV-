@@ -24,6 +24,15 @@ export interface InitialLeadData {
   secondFollowedUpHoursAgo?: number;
   isConverted?: boolean;
   orderValue?: number;
+  // Advance Scan & Triage fields
+  detectedPhone?: string;
+  detectedPhoneSnippet?: string;
+  voiceCount?: number;
+  textCount?: number;
+  scanCategory?: string;
+  isQualified?: boolean;
+  qualificationReason?: string;
+  customerAddress?: string;
 }
 
 export const INITIAL_PAGES: InitialPageData[] = [
@@ -276,6 +285,28 @@ export const INITIAL_LEADS: InitialLeadData[] = [
     secondFollowedUpHoursAgo: 2.0,
     isConverted: true,
     orderValue: 75.0,
+    detectedPhone: "012 888 999",
+    detectedPhoneSnippet: "...My phone number is 012-888-999...",
+    customerAddress: "#23A St 288, BKK1, Phnom Penh",
+    scanCategory: "PHONE_DETECTED",
+    isQualified: true,
+    qualificationReason: "Customer sent mobile number (012 888 999) for purchase",
+  },
+  {
+    pageId: "fb_page_01",
+    psid: "psid_fashion_voice_01",
+    customerName: "Sophea Rath",
+    customerAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80",
+    adSource: "Ad #101: Oversized Vintage Hoodie (40% OFF)",
+    lastCustomerMessage: "🎙️ Voice message (0:24s): Asking about custom wool embroidery and delivery timeline to Siem Reap province",
+    lastCustomerMessageHoursAgo: 0.6,
+    lastAgentMessage: "Hello Sophea! Let me check with our tailoring team right away.",
+    lastAgentMessageHoursAgo: 0.8,
+    status: "AWAITING_CUSTOMER",
+    voiceCount: 3,
+    textCount: 1,
+    scanCategory: "MULTI_VOICE",
+    isQualified: false,
   },
   // Page 2: SieLab Electronics
   {
@@ -294,6 +325,7 @@ export const INITIAL_LEADS: InitialLeadData[] = [
     firstFollowedUpHoursAgo: 4.8,
     isConverted: true,
     orderValue: 39.0,
+    isQualified: true,
   },
   {
     pageId: "fb_page_02",
@@ -301,7 +333,7 @@ export const INITIAL_LEADS: InitialLeadData[] = [
     customerName: "Dara Pich",
     customerAvatar: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=100&auto=format&fit=crop&q=80",
     adSource: "Ad #202: Ultra-Fast Magnetic Wireless Power Bank",
-    lastCustomerMessage: "Okay fine, with the free delivery coupon I will order 2 pieces. One black, one titanium grey.",
+    lastCustomerMessage: "Okay fine, with the free delivery coupon I will order 2 pieces. One black, one titanium grey. Call me 085 123 456 to confirm address.",
     lastCustomerMessageHoursAgo: 0.8,
     lastAgentMessage: "Exclusive VIP offer for you with free delivery!",
     lastAgentMessageHoursAgo: 1.5,
@@ -312,6 +344,79 @@ export const INITIAL_LEADS: InitialLeadData[] = [
     secondFollowedUpHoursAgo: 1.5,
     isConverted: true,
     orderValue: 58.0,
+    detectedPhone: "085 123 456",
+    detectedPhoneSnippet: "...Call me 085 123 456 to confirm address...",
+    customerAddress: "Building 4, Toul Kork, Phnom Penh",
+    scanCategory: "PHONE_DETECTED",
+    isQualified: true,
+  },
+  {
+    pageId: "fb_page_02",
+    psid: "psid_electro_text_01",
+    customerName: "Vireak Bot",
+    customerAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80",
+    adSource: "Ad #203: Smartwatch Pro Fitness Tracker",
+    lastCustomerMessage: "Thanks! One last question, does it support real-time heart rate and blood oxygen sync with Apple Health?",
+    lastCustomerMessageHoursAgo: 1.1,
+    lastAgentMessage: "Yes Vireak, full Apple Health & Google Fit sync included!",
+    lastAgentMessageHoursAgo: 1.4,
+    status: "AWAITING_CUSTOMER",
+    voiceCount: 0,
+    textCount: 6,
+    scanCategory: "HIGH_TEXT",
+    isQualified: false,
+  },
+  // Hot Purchase Intent Lead on Page 4 (Home Decor)
+  {
+    pageId: "fb_page_04",
+    psid: "psid_home_phone_02",
+    customerName: "Kosal Meas",
+    customerAvatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80",
+    adSource: "Ad #401: Minimalist Nordic Ceramic Lamp",
+    lastCustomerMessage: "Yes please deliver 2 Nordic lamps to Sen Sok. My mobile is 016 777 888. Pay COD when arrived.",
+    lastCustomerMessageHoursAgo: 0.4,
+    lastAgentMessage: "Hi Kosal! We received your order for 2 lamps. Confirming shipment shortly.",
+    lastAgentMessageHoursAgo: 0.6,
+    status: "REPLIED",
+    detectedPhone: "016 777 888",
+    detectedPhoneSnippet: "...My mobile is 016 777 888. Pay COD...",
+    customerAddress: "#45 Borey Peng Huoth, Sen Sok, Phnom Penh",
+    scanCategory: "PHONE_DETECTED",
+    isQualified: false,
+  },
+  // Hot Purchase Intent Lead on Page 5 (Moew Cafe)
+  {
+    pageId: "fb_page_05",
+    psid: "psid_cafe_phone_01",
+    customerName: "Sovannary Seng",
+    customerAvatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100&auto=format&fit=crop&q=80",
+    adSource: "Ad #501: Weekend Artisan Brunch & Garden Terrace Table Booking",
+    lastCustomerMessage: "Confirmed for Sunday brunch! Table of 6 on the garden terrace please. Contact phone: 098 765 432.",
+    lastCustomerMessageHoursAgo: 0.5,
+    lastAgentMessage: "Wonderful Sovannary! We will prepare a prime 6-seat table for you.",
+    lastAgentMessageHoursAgo: 0.7,
+    status: "REPLIED",
+    detectedPhone: "098 765 432",
+    detectedPhoneSnippet: "...Contact phone: 098 765 432...",
+    scanCategory: "PHONE_DETECTED",
+    isQualified: false,
+  },
+  // Multi-voice Inquiry on Page 3 (Beauty)
+  {
+    pageId: "fb_page_03",
+    psid: "psid_beauty_voice_02",
+    customerName: "Leakhena Som",
+    customerAvatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80",
+    adSource: "Ad #301: Hydrating Vitamin C Serum Duo Pack",
+    lastCustomerMessage: "🎙️ Voice message (0:19s): Consultation regarding dry skin redness and recommended morning skin routine",
+    lastCustomerMessageHoursAgo: 1.5,
+    lastAgentMessage: "Hello Leakhena! Our beauty advisor listened to your note. Here is our recommendation.",
+    lastAgentMessageHoursAgo: 1.8,
+    status: "AWAITING_CUSTOMER",
+    voiceCount: 2,
+    textCount: 2,
+    scanCategory: "MULTI_VOICE",
+    isQualified: false,
   },
   // Page 3: SieLab Beauty
   {

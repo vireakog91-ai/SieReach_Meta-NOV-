@@ -32,6 +32,55 @@ body,
 }
 
 /* ========================================================================= */
+/* MIDNIGHT & EMERALD RICH THEME EXTENSIONS                                  */
+/* ========================================================================= */
+html.midnight,
+html[data-theme="midnight"] {
+  color-scheme: dark;
+  --background: #02040a;
+  --foreground: #f8fafc;
+  --card-bg: #090d1a;
+  --card-border: #1e293b;
+}
+
+html.midnight body,
+html.midnight .app-canvas {
+  background-color: #02040a !important;
+}
+
+html.midnight [class*="bg-slate-950"]:not(.telegram-mockup-screen):not(.telegram-mockup-screen *) {
+  background-color: #02040a !important;
+}
+
+html.midnight [class*="bg-slate-900"]:not(.telegram-mockup-screen):not(.telegram-mockup-screen *) {
+  background-color: #080d1a !important;
+  border-color: #1a2336 !important;
+}
+
+html.emerald,
+html[data-theme="emerald"] {
+  color-scheme: dark;
+  --background: #02140f;
+  --foreground: #ecfdf5;
+  --card-bg: #052119;
+  --card-border: #0a3d30;
+}
+
+html.emerald body,
+html.emerald .app-canvas {
+  background-color: #02140f !important;
+}
+
+html.emerald [class*="bg-slate-950"]:not(.telegram-mockup-screen):not(.telegram-mockup-screen *) {
+  background-color: #02140f !important;
+}
+
+html.emerald [class*="bg-slate-900"]:not(.telegram-mockup-screen):not(.telegram-mockup-screen *) {
+  background-color: #04241c !important;
+  border-color: #0d4637 !important;
+}
+
+/* ========================================================================= */
 /* LIGHT THEME CONTAINER SURFACES & CARD ELEVATIONS                         */
 /* ========================================================================= */
 

@@ -6,7 +6,7 @@
     "dev": "node scripts/sync-prisma.js && next dev -H 0.0.0.0 -p 3001",
     "build": "node scripts/sync-prisma.js && prisma generate && next build",
     "postinstall": "node scripts/sync-prisma.js && prisma generate",
-    "start": "node scripts/sync-prisma.js && node -e \"const url = process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL || process.env.STORAGE_URL; if (url && !url.startsWith('file:')) { try { require('child_process').execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit' }); } catch(e) { console.error('Prisma push warning:', e.message); } }\" && next start",
+    "start": "node scripts/prod-start.js && next start",
     "lint": "eslint",
     "db:push": "node scripts/sync-prisma.js && prisma db push"
   },

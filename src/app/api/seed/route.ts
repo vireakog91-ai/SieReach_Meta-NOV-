@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { INITIAL_PAGES, INITIAL_LEADS, INITIAL_AD_CREATIVE_INSIGHTS } from "@/lib/mockData";
+import { evaluateAdvanceScan } from "@/lib/advanceScan";
 import { requireAdminAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -127,6 +128,17 @@ export async function POST(req: NextRequest) {
           ? new Date(now - custMsAgo)
           : null;
 
+      const scanEval = evaluateAdvanceScan(
+        [{ sender: "customer", text: lead.lastCustomerMessage }],
+        {
+          lastCustomerMessage: lead.lastCustomerMessage,
+          detectedPhone: lead.detectedPhone,
+          voiceCount: lead.voiceCount,
+          textCount: lead.textCount,
+          orderValue: lead.orderValue,
+        }
+      );
+
       const createdLead = await prisma.leadConversation.create({
         data: {
           pageId: lead.pageId,
@@ -147,6 +159,16 @@ export async function POST(req: NextRequest) {
           repliedAfterStep: lead.repliedAfterStep || null,
           isConverted: Boolean(lead.isConverted),
           orderValue: lead.orderValue || null,
+          detectedPhone: lead.detectedPhone || scanEval.detectedPhone,
+          detectedPhoneSnippet: lead.detectedPhoneSnippet || scanEval.detectedPhoneSnippet,
+          voiceCount: lead.voiceCount !== undefined ? lead.voiceCount : scanEval.voiceCount,
+          textCount: lead.textCount !== undefined ? lead.textCount : scanEval.textCount,
+          scanCategory: lead.scanCategory || scanEval.scanCategory,
+          scanFlags: JSON.stringify(scanEval.scanFlags),
+          isQualified: Boolean(lead.isQualified || (lead.detectedPhone && lead.isConverted)),
+          qualificationReason: lead.qualificationReason || null,
+          customerAddress: lead.customerAddress || null,
+          advanceScanAt: new Date(),
         },
       });
 

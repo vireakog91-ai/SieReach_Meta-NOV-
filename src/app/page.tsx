@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Radar,
   Bot,
@@ -25,9 +25,12 @@ import {
   FlaskConical,
   Radio,
 } from "lucide-react";
+import { useTheme } from "@/components/ThemeProvider";
+import { ThemeLayoutSwitcher } from "@/components/ThemeLayoutSwitcher";
 import { Navbar } from "@/components/Navbar";
 import { StatsCards } from "@/components/StatsCards";
 import { ScannerTab } from "@/components/ScannerTab";
+import { AdvanceScanTab } from "@/components/AdvanceScanTab";
 import { BotSetupTab } from "@/components/BotSetupTab";
 import { ReportDashboardTab } from "@/components/ReportDashboardTab";
 import { AdAttributionTab } from "@/components/AdAttributionTab";
@@ -74,14 +77,28 @@ function getShortPageName(pageName: string, businessName?: string): string {
 }
 
 export default function SieReachDashboard() {
-  // Primary Tool Category: "hub" vs "cdc" vs "ads" vs "blaster" vs "response" vs "comcent"
-  const [toolCategory, setToolCategory] = useState<"hub" | "cdc" | "ads" | "blaster" | "response" | "comcent">("hub");
+  const { navLayout } = useTheme();
+
+  // Primary Tool Category: "hub" vs "cdc" vs "ads" vs "advance-scan" vs "blaster" vs "response" vs "comcent"
+  const [toolCategory, setToolCategory] = useState<"hub" | "cdc" | "ads" | "advance-scan" | "blaster" | "response" | "comcent">("hub");
+
+  const handleSelectToolCategory = (cat: string) => {
+    setToolCategory(cat as any);
+    if (cat === "hub") setActiveTab("central-hub");
+    else if (cat === "cdc") setActiveTab("cdc-portal");
+    else if (cat === "ads") setActiveTab("advance-ads-analytics");
+    else if (cat === "advance-scan") setActiveTab("advance-scan");
+    else if (cat === "blaster") setActiveTab("scanner");
+    else if (cat === "response") setActiveTab("response-rules");
+    else if (cat === "comcent") setActiveTab("comcent-live");
+  };
 
   const [activeTab, setActiveTab] = useState<
     | "central-hub"
     | "cdc-portal"
     | "cdc-planner"
     | "cdc-templates"
+    | "advance-scan"
     | "scanner"
     | "bot-setup"
     | "reports"
@@ -178,7 +195,6 @@ export default function SieReachDashboard() {
 
   // Live Data Sync Timestamp & Relative Time Ticker
   const [lastDataSyncTime, setLastDataSyncTime] = useState<Date | null>(null);
-  const [, setSyncTick] = useState(0);
 
   // Scheduled Synchronization & Auto-Pilot Engine Settings
   // Schedule presets: 15s, 30s (default), 60s, or 0 (Manual / Paused)
@@ -191,11 +207,6 @@ export default function SieReachDashboard() {
     message: string | null;
   } | null>(null);
 
-  useEffect(() => {
-    const timer = setInterval(() => setSyncTick((t) => t + 1), 10_000);
-    return () => clearInterval(timer);
-  }, []);
-
   const getRelativeSyncTime = (date: Date | null) => {
     if (!date) return "Just now";
     const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -206,19 +217,22 @@ export default function SieReachDashboard() {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
-  // Fetch all data in parallel for high-speed sub-200ms loading with no-store cache busting
-  const fetchData = useCallback(async () => {
+  // Fetch data with smart resource caching (skips static portfolios/settings during scheduled auto-sync)
+  const fetchData = useCallback(async (isScheduledSync = false) => {
     try {
       const pageParam = selectedPageId !== "ALL" ? `&pageId=${selectedPageId}` : "";
       const t = Date.now();
 
+      // On scheduled auto-sync, skip static portfolios, pages, and settings if already populated
+      const shouldFetchStatic = !isScheduledSync || portfolios.length === 0 || pages.length === 0;
+
       const [portRes, pagesRes, leadsRes, campRes, logsRes, setRes] = await Promise.all([
-        fetch(`/api/portfolios?_t=${t}`, { cache: "no-store" }).catch(() => null),
-        fetch(`/api/pages?_t=${t}`, { cache: "no-store" }).catch(() => null),
+        shouldFetchStatic ? fetch(`/api/portfolios?_t=${t}`, { cache: "no-store" }).catch(() => null) : null,
+        shouldFetchStatic ? fetch(`/api/pages?_t=${t}`, { cache: "no-store" }).catch(() => null) : null,
         fetch(`/api/leads?thresholdHours=${thresholdHours}${pageParam}&_t=${t}`, { cache: "no-store" }).catch(() => null),
         fetch(`/api/campaigns?_t=${t}`, { cache: "no-store" }).catch(() => null),
         fetch(`/api/logs?_t=${t}`, { cache: "no-store" }).catch(() => null),
-        fetch(`/api/settings?_t=${t}`, { cache: "no-store" }).catch(() => null),
+        shouldFetchStatic ? fetch(`/api/settings?_t=${t}`, { cache: "no-store" }).catch(() => null) : null,
       ]);
 
       if (portRes?.ok) {
@@ -402,8 +416,8 @@ export default function SieReachDashboard() {
         }
       }
 
-      // 2. Refresh live data with cache-busting to immediately update dashboard UI
-      await fetchData();
+      // 2. Refresh live operational data (skipping static tables) to immediately update dashboard UI
+      await fetchData(true);
     } catch (err) {
       console.error("Scheduled sync error:", err);
     } finally {
@@ -418,11 +432,14 @@ export default function SieReachDashboard() {
     runScheduledSyncRef.current = runScheduledSync;
   }, [runScheduledSync]);
 
-  // Scheduled 1-second Countdown Ticker (Stable Ref-Based Loop)
+  // Scheduled 1-second Countdown Ticker (Paused when tab/browser is in background)
   useEffect(() => {
     if (syncScheduleSeconds <= 0) return; // Paused
 
     const timer = setInterval(() => {
+      // PAGE VISIBILITY GUARD: Skip ticker & sync when tab is hidden to eliminate waste queries
+      if (typeof document !== "undefined" && document.hidden) return;
+
       setCountdownSeconds((prev) => {
         if (prev <= 1) {
           setTimeout(() => {
@@ -436,6 +453,24 @@ export default function SieReachDashboard() {
 
     return () => clearInterval(timer);
   }, [syncScheduleSeconds]);
+
+  // Tab Visibility Listener: Re-sync immediately when returning to tab if overdue
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && !document.hidden && syncScheduleSeconds > 0) {
+        const elapsed = lastDataSyncTime ? (Date.now() - lastDataSyncTime.getTime()) / 1000 : 999;
+        if (elapsed >= syncScheduleSeconds) {
+          runScheduledSyncRef.current();
+          setCountdownSeconds(syncScheduleSeconds);
+        }
+      }
+    };
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+      return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    }
+  }, [syncScheduleSeconds, lastDataSyncTime]);
 
   const handleSelectSyncSchedule = (newSeconds: number) => {
     setSyncScheduleSeconds(newSeconds);
@@ -927,6 +962,8 @@ export default function SieReachDashboard() {
         onToggleMockMode={handleToggleMockMode}
         onResetDemoData={handleResetDemoData}
         isRefreshing={isScanning}
+        selectedPageId={selectedPageId}
+        onSelectPageId={setSelectedPageId}
         pages={pages}
         portfolios={portfolios}
         selectedBusiness={selectedBusiness}
@@ -940,6 +977,8 @@ export default function SieReachDashboard() {
           setSettingsSubTab("pages");
         }}
         onLockWorkspace={handleLockWorkspace}
+        toolCategory={toolCategory}
+        onSelectToolCategory={handleSelectToolCategory}
       />
 
       {/* Main Container */}
@@ -965,105 +1004,107 @@ export default function SieReachDashboard() {
           </div>
         )}
 
-        {/* Active Business Portfolio & Facebook Page Filter Strip */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-2.5 shadow-2xs">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 max-w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="flex items-center space-x-2 shrink-0 pr-3 border-r border-slate-200 dark:border-slate-800">
-              <span className="text-base">{activePortfolio?.icon || (selectedBusiness === "ALL" ? "🌐" : "🏢")}</span>
-              <span className="text-xs font-bold text-slate-900 dark:text-white">
-                {selectedBusiness === "ALL" ? "All Portfolios" : selectedBusiness}
-              </span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono font-medium">
-                {scopedPages.length}p
-              </span>
-            </div>
-
-            <div className="flex items-center space-x-1.5 shrink-0">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
-                <Layers className="w-3.5 h-3.5 text-blue-500" />
-                <span>Page:</span>
-              </span>
-
-              {/* All Pages Button */}
-              <button
-                onClick={() => setSelectedPageId("ALL")}
-                className={`px-2.5 py-1 rounded-lg text-xs transition shrink-0 flex items-center gap-1 cursor-pointer ${
-                  selectedPageId === "ALL"
-                    ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-bold shadow-xs"
-                    : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-medium"
-                }`}
-              >
-                <span>All ({scopedPages.length})</span>
-              </button>
-
-              {/* Individual Page Chips (Prefix Stripped for Clean Compact Fit) */}
-              {scopedPages.map((pg) => {
-                const isPageActive = selectedPageId === pg.pageId;
-                const leadCount = scannerData.leads.filter((l) => l.pageId === pg.pageId).length;
-                const displayName = getShortPageName(pg.name, selectedBusiness);
-                return (
-                  <button
-                    key={pg.pageId}
-                    onClick={() => setSelectedPageId(pg.pageId)}
-                    className={`px-2.5 py-1 rounded-lg text-xs transition shrink-0 flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                      isPageActive
-                        ? "bg-blue-600 text-white font-bold shadow-xs border border-blue-600 dark:bg-blue-600 dark:border-blue-500"
-                        : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-medium"
-                    }`}
-                    title={`Filter by ${pg.name}`}
-                  >
-                    {pg.pictureUrl ? (
-                      <img
-                        src={pg.pictureUrl}
-                        alt={pg.name}
-                        className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
-                      />
-                    ) : (
-                      <span className="text-xs shrink-0">📄</span>
-                    )}
-                    <span className="truncate max-w-[150px] sm:max-w-[220px]">{displayName}</span>
-                    {leadCount > 0 && (
-                      <span
-                        className={`text-[9px] px-1.5 py-0.2 rounded-full font-mono ${
-                          isPageActive
-                            ? "bg-blue-700 text-white font-bold"
-                            : "bg-slate-200 dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-medium"
-                        }`}
-                      >
-                        {leadCount}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-2 shrink-0 ml-auto">
-            {hasActiveAutoBlast && (
-              <div
-                className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold"
-                title={`Auto-Pilot background blast engine is active. Next sweep in ${countdownSeconds}s.`}
-              >
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        {/* Active Business Portfolio & Facebook Page Filter Strip (Shown in Classic 3-Row Mode) */}
+        {navLayout === "classic-3row" && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-2.5 shadow-2xs">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 max-w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex items-center space-x-2 shrink-0 pr-3 border-r border-slate-200 dark:border-slate-800">
+                <span className="text-base">{activePortfolio?.icon || (selectedBusiness === "ALL" ? "🌐" : "🏢")}</span>
+                <span className="text-xs font-bold text-slate-900 dark:text-white">
+                  {selectedBusiness === "ALL" ? "All Portfolios" : selectedBusiness}
                 </span>
-                <span>Auto-Pilot: {syncScheduleSeconds > 0 ? `${countdownSeconds}s` : "Paused"}</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono font-medium">
+                  {scopedPages.length}p
+                </span>
               </div>
-            )}
 
-            {selectedPageId !== "ALL" && (
-              <button
-                onClick={() => setSelectedPageId("ALL")}
-                className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 shrink-0 cursor-pointer font-medium"
-              >
-                <span>Reset Page Filter</span>
-                <span className="text-xs">✕</span>
-              </button>
-            )}
+              <div className="flex items-center space-x-1.5 shrink-0">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
+                  <Layers className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Page:</span>
+                </span>
+
+                {/* All Pages Button */}
+                <button
+                  onClick={() => setSelectedPageId("ALL")}
+                  className={`px-2.5 py-1 rounded-lg text-xs transition shrink-0 flex items-center gap-1 cursor-pointer ${
+                    selectedPageId === "ALL"
+                      ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-bold shadow-xs"
+                      : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-medium"
+                  }`}
+                >
+                  <span>All ({scopedPages.length})</span>
+                </button>
+
+                {/* Individual Page Chips (Prefix Stripped for Clean Compact Fit) */}
+                {scopedPages.map((pg) => {
+                  const isPageActive = selectedPageId === pg.pageId;
+                  const leadCount = scannerData.leads.filter((l) => l.pageId === pg.pageId).length;
+                  const displayName = getShortPageName(pg.name, selectedBusiness);
+                  return (
+                    <button
+                      key={pg.pageId}
+                      onClick={() => setSelectedPageId(pg.pageId)}
+                      className={`px-2.5 py-1 rounded-lg text-xs transition shrink-0 flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                        isPageActive
+                          ? "bg-blue-600 text-white font-bold shadow-xs border border-blue-600 dark:bg-blue-600 dark:border-blue-500"
+                          : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-medium"
+                      }`}
+                      title={`Filter by ${pg.name}`}
+                    >
+                      {pg.pictureUrl ? (
+                        <img
+                          src={pg.pictureUrl}
+                          alt={pg.name}
+                          className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                        />
+                      ) : (
+                        <span className="text-xs shrink-0">📄</span>
+                      )}
+                      <span className="truncate max-w-[150px] sm:max-w-[220px]">{displayName}</span>
+                      {leadCount > 0 && (
+                        <span
+                          className={`text-[9px] px-1.5 py-0.2 rounded-full font-mono ${
+                            isPageActive
+                              ? "bg-blue-700 text-white font-bold"
+                              : "bg-slate-200 dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-medium"
+                          }`}
+                        >
+                          {leadCount}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 shrink-0 ml-auto">
+              {hasActiveAutoBlast && (
+                <div
+                  className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold"
+                  title={`Auto-Pilot background blast engine is active. Next sweep in ${countdownSeconds}s.`}
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span>Auto-Pilot: {syncScheduleSeconds > 0 ? `${countdownSeconds}s` : "Paused"}</span>
+                </div>
+              )}
+
+              {selectedPageId !== "ALL" && (
+                <button
+                  onClick={() => setSelectedPageId("ALL")}
+                  className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 shrink-0 cursor-pointer font-medium"
+                >
+                  <span>Reset Page Filter</span>
+                  <span className="text-xs">✕</span>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Dashboard Top Overview Stats (Blaster Mode Only) */}
         {toolCategory === "blaster" && (
@@ -1082,335 +1123,327 @@ export default function SieReachDashboard() {
           />
         )}
 
-        {/* Unified Executive Command Navigation Dock */}
-        <div className="bg-white/95 dark:bg-slate-900/95 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs backdrop-blur-sm flex items-center">
-          {/* Segmented Mode Selector + Active Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth flex-1 min-w-0">
-            {/* Primary Mode Pill Switcher */}
-            <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800/90 rounded-xl border border-slate-200/90 dark:border-slate-700/80 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setToolCategory("hub");
-                  setActiveTab("central-hub");
-                }}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  toolCategory === "hub"
-                    ? "bg-emerald-600 text-white shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                }`}
-                title="Central Intelligence & Sales Hub"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
-                <span>Central Hub</span>
-              </button>
+        {/* Unified Executive Command Navigation Dock (Hidden in Ultra-Compact Mode) */}
+        {navLayout !== "ultra-compact" && (
+          <div className="bg-white/95 dark:bg-slate-900/95 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs backdrop-blur-sm flex flex-col gap-1.5">
+            {/* Top Row: Primary Mode Selector */}
+            <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth flex-1 min-w-0">
+              {/* Primary Mode Pill Switcher */}
+              <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800/90 rounded-xl border border-slate-200/90 dark:border-slate-700/80 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToolCategory("hub");
+                    setActiveTab("central-hub");
+                  }}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    toolCategory === "hub"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                  title="Central Intelligence & Sales Hub"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>Central Hub</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setToolCategory("cdc");
-                  setActiveTab("cdc-portal");
-                }}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  toolCategory === "cdc"
-                    ? "bg-sky-600 text-white shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                }`}
-                title="CDC: Channel Distribution Center (Multi-Page Content Planner)"
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>CDC</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToolCategory("cdc");
+                    setActiveTab("cdc-portal");
+                  }}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    toolCategory === "cdc"
+                      ? "bg-sky-600 text-white shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                  title="CDC: Channel Distribution Center (Multi-Page Content Planner)"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>CDC</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setToolCategory("ads");
-                  setActiveTab("advance-ads-analytics");
-                }}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  toolCategory === "ads"
-                    ? "bg-purple-600 text-white shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                }`}
-                title="Meta Ads Advisor & Attribution Intelligence"
-              >
-                <Target className="w-3.5 h-3.5" />
-                <span>Ads Advisor</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToolCategory("ads");
+                    setActiveTab("advance-ads-analytics");
+                  }}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    toolCategory === "ads"
+                      ? "bg-purple-600 text-white shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                  title="Meta Ads Advisor & Attribution Intelligence"
+                >
+                  <Target className="w-3.5 h-3.5" />
+                  <span>Ads Advisor</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setToolCategory("blaster");
-                  if (
-                    activeTab === "central-hub" ||
-                    activeTab.startsWith("cdc-") ||
-                    activeTab === "advance-ads-analytics" ||
-                    activeTab === "ad-attribution" ||
-                    activeTab === "response-rules" ||
-                    activeTab === "response-templates" ||
-                    activeTab === "response-simulator" ||
-                    activeTab === "response" ||
-                    activeTab === "json-builder" ||
-                    activeTab === "comcent" ||
-                    activeTab === "comcent-live"
-                  ) {
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToolCategory("advance-scan");
+                    setActiveTab("advance-scan");
+                  }}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    toolCategory === "advance-scan"
+                      ? "bg-teal-600 text-white shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                  title="Chat Advance Scan: Phone Detection & Multi-Voice Triage"
+                >
+                  <Radar className="w-3.5 h-3.5" />
+                  <span>Advance Scan</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToolCategory("blaster");
                     setActiveTab("scanner");
-                  }
-                }}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  toolCategory === "blaster"
-                    ? "bg-blue-600 text-white shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                }`}
-                title="Blaster Mode"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>Blaster</span>
-              </button>
+                  }}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    toolCategory === "blaster"
+                      ? "bg-blue-600 text-white shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                  title="Blaster Mode"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Blaster</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setToolCategory("response");
-                  if (
-                    activeTab === "central-hub" ||
-                    activeTab.startsWith("cdc-") ||
-                    activeTab === "advance-ads-analytics" ||
-                    activeTab === "ad-attribution" ||
-                    activeTab === "scanner" ||
-                    activeTab === "bot-setup" ||
-                    activeTab === "reports" ||
-                    activeTab === "logs" ||
-                    activeTab === "comcent" ||
-                    activeTab === "comcent-live"
-                  ) {
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToolCategory("response");
                     setActiveTab("response-rules");
-                  }
-                }}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  toolCategory === "response"
-                    ? "bg-amber-600 text-white shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                }`}
-                title="Response Mode"
-              >
-                <Zap className="w-3.5 h-3.5 fill-current ml-0.5" />
-                <span>Response</span>
-              </button>
+                  }}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    toolCategory === "response"
+                      ? "bg-amber-600 text-white shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                  title="Response Mode"
+                >
+                  <Zap className="w-3.5 h-3.5 fill-current ml-0.5" />
+                  <span>Response</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setToolCategory("comcent");
-                  setActiveTab("comcent-live");
-                }}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  toolCategory === "comcent"
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                }`}
-                title="COMCENT: Customer Communication Center"
-              >
-                <Radio className="w-3.5 h-3.5" />
-                <span>COMCENT</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToolCategory("comcent");
+                    setActiveTab("comcent-live");
+                  }}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    toolCategory === "comcent"
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                  title="COMCENT: Customer Communication Center"
+                >
+                  <Radio className="w-3.5 h-3.5" />
+                  <span>COMCENT</span>
+                </button>
+              </div>
+
+              {/* In Classic 3-Row Mode: Sub-tabs sit on the right with subtle divider */}
+              {navLayout === "classic-3row" && (
+                <>
+                  <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1 shrink-0" />
+                  <div className="flex items-center gap-1 shrink-0 overflow-x-auto [scrollbar-width:none]">
+                    {(toolCategory === "hub"
+                      ? [
+                          { id: "central-hub", label: "Sales Advisor", title: "Executive Business Intelligence & Strategy", icon: Sparkles, badge: "AI" },
+                          { id: "settings", label: "Settings", title: "Facebook Pages, API & Platform Settings", icon: Settings, badge: null },
+                        ]
+                      : toolCategory === "cdc"
+                      ? [
+                          { id: "cdc-portal", label: "Distribution Portal", title: "Unified Multi-Page Content Publishing, Scheduling & Templates", icon: Layers, badge: "CDC" },
+                          { id: "settings", label: "Settings", title: "Facebook Pages, API & Platform Settings", icon: Settings, badge: null },
+                        ]
+                      : toolCategory === "ads"
+                      ? [
+                          { id: "advance-ads-analytics", label: "Creative & Sales Intelligence", title: "Advanced Photo vs Video Analytics, Copy Angles, Campaign Design & AI-Ready Export", icon: Sparkles, badge: "AI Ready" },
+                          { id: "ad-attribution", label: "Bot & Fraud Matrix", title: "Meta Ad Creative Performance & Bot Detection Matrix", icon: Target, badge: "Fraud Audit" },
+                          { id: "settings", label: "Settings", title: "Facebook Pages, API & Platform Settings", icon: Settings, badge: null },
+                        ]
+                      : toolCategory === "advance-scan"
+                      ? [
+                          { id: "advance-scan", label: "Advance Chat Scan", title: "Incoming Chat Detection, Mobile Phone Extraction & Multi-Voice Triage", icon: Radar, badge: "Live" },
+                          { id: "settings", label: "Settings", title: "Facebook Pages, API & Platform Settings", icon: Settings, badge: null },
+                        ]
+                      : toolCategory === "blaster"
+                      ? [
+                          { id: "scanner", label: "Inactive Scanner", title: "Inactive Lead Scanner", icon: Radar, badge: scopedScannerSummary.unresponsiveCount > 0 ? scopedScannerSummary.unresponsiveCount : null },
+                          { id: "advance-scan", label: "Advance Scan", title: "Incoming Chat Detection & Mobile Phone Extraction", icon: Zap, badge: "Hot" },
+                          { id: "bot-setup", label: "Bot Setup", title: "Follow-Up Bot Setup & Rules", icon: Bot, badge: null },
+                          { id: "reports", label: "Performance & ROI", title: "Bot Performance & ROI Analytics", icon: BarChart3, badge: "ROI" },
+                          { id: "logs", label: "Blast Logs", title: "Blast Delivery & Message History Logs", icon: History, badge: scopedLogs.length > 0 ? scopedLogs.length : null },
+                          { id: "settings", label: "Settings", title: "Facebook Pages, API & Platform Settings", icon: Settings, badge: null },
+                        ]
+                      : toolCategory === "response"
+                      ? [
+                          { id: "response-rules", label: "Inbound Rules", title: "Keywords, Attachments & Anti-Spam Trigger Rules", icon: Sliders, badge: "Active" },
+                          { id: "response-templates", label: "JSON Templates", title: "Multi-Template Interactive JSON Library", icon: FileJson, badge: "Flows" },
+                          { id: "response-simulator", label: "Flow Simulator", title: "Live Chat Interactive Sandbox Simulator", icon: FlaskConical, badge: "Live" },
+                          { id: "settings", label: "Settings", title: "Facebook Pages, API & Platform Settings", icon: Settings, badge: null },
+                        ]
+                      : [
+                          { id: "comcent-live", label: "Live Command Stream", title: "Live Customer Communication & House Dispatch", icon: Radio, badge: "Live" },
+                          { id: "settings", label: "Settings", title: "Facebook Pages, API & Platform Settings", icon: Settings, badge: null },
+                        ]
+                    ).map((tab) => {
+                      const Icon = tab.icon;
+                      const isActive =
+                        activeTab === tab.id ||
+                        (tab.id === "comcent-live" && activeTab === "comcent") ||
+                        (tab.id === "settings" && activeTab === "pages") ||
+                        (tab.id === "response-rules" && activeTab === "response") ||
+                        (tab.id === "response-templates" && activeTab === "json-builder");
+
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => setActiveTab(tab.id as any)}
+                          title={tab.title}
+                          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs transition shrink-0 cursor-pointer ${
+                            isActive
+                              ? toolCategory === "hub"
+                                ? "bg-emerald-600 text-white font-bold shadow-xs dark:bg-emerald-600"
+                                : toolCategory === "ads"
+                                ? "bg-purple-600 text-white font-bold shadow-xs dark:bg-purple-600"
+                                : toolCategory === "advance-scan"
+                                ? "bg-teal-600 text-white font-bold shadow-xs dark:bg-teal-600"
+                                : toolCategory === "response"
+                                ? "bg-amber-600 text-white font-bold shadow-xs dark:bg-amber-600"
+                                : toolCategory === "comcent"
+                                ? "bg-indigo-600 text-white font-bold shadow-xs dark:bg-indigo-600"
+                                : "bg-blue-600 text-white font-bold shadow-xs dark:bg-blue-600"
+                              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/60 font-medium"
+                          }`}
+                        >
+                          <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-white" : "text-slate-400 dark:text-slate-500"}`} />
+                          <span className="whitespace-nowrap">{tab.label}</span>
+                          {tab.badge !== null && (
+                            <span
+                              className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold transition shrink-0 ${
+                                isActive
+                                  ? "bg-white/20 text-white"
+                                  : "bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
+                              }`}
+                            >
+                              {tab.badge}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
 
-            {/* Subtle Divider */}
-            <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1 shrink-0" />
+            {/* In Executive 2-Row Mode: Contextual sub-tabs sit cleanly below with zero cut-off! */}
+            {navLayout === "executive-2row" && (
+              <div className="flex items-center gap-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-800/80 overflow-x-auto [scrollbar-width:none]">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 px-2 shrink-0">
+                  {toolCategory.toUpperCase()} Views:
+                </span>
+                {(toolCategory === "hub"
+                  ? [
+                      { id: "central-hub", label: "Sales Advisor", title: "Executive Business Intelligence & Strategy", icon: Sparkles, badge: "AI" },
+                      { id: "settings", label: "Settings", title: "Facebook Pages, API & Platform Settings", icon: Settings, badge: null },
+                    ]
+                  : toolCategory === "cdc"
+                  ? [
+                      { id: "cdc-portal", label: "Distribution Portal", title: "Unified Multi-Page Content Publishing, Scheduling & Templates", icon: Layers, badge: "CDC" },
+                      { id: "settings", label: "Settings", title: "Facebook Pages, API & Platform Settings", icon: Settings, badge: null },
+                    ]
+                  : toolCategory === "ads"
+                  ? [
+                      { id: "advance-ads-analytics", label: "Creative & Sales Intelligence", title: "Advanced Photo vs Video Analytics, Copy Angles, Campaign Design & AI-Ready Export", icon: Sparkles, badge: "AI Ready" },
+                      { id: "ad-attribution", label: "Bot & Fraud Matrix", title: "Meta Ad Creative Performance & Bot Detection Matrix", icon: Target, badge: "Fraud Audit" },
+                      { id: "settings", label: "Settings", title: "Facebook Pages, API & Platform Settings", icon: Settings, badge: null },
+                    ]
+                  : toolCategory === "advance-scan"
+                  ? [
+                      { id: "advance-scan", label: "Advance Chat Scan", title: "Incoming Chat Detection, Mobile Phone Extraction & Multi-Voice Triage", icon: Radar, badge: "Live" },
+                      { id: "settings", label: "Settings", title: "Facebook Pages, API & Platform Settings", icon: Settings, badge: null },
+                    ]
+                  : toolCategory === "blaster"
+                  ? [
+                      { id: "scanner", label: "Inactive Scanner", title: "Inactive Lead Scanner", icon: Radar, badge: scopedScannerSummary.unresponsiveCount > 0 ? scopedScannerSummary.unresponsiveCount : null },
+                      { id: "advance-scan", label: "Advance Scan", title: "Incoming Chat Detection & Mobile Phone Extraction", icon: Zap, badge: "Hot" },
+                      { id: "bot-setup", label: "Bot Setup", title: "Follow-Up Bot Setup & Rules", icon: Bot, badge: null },
+                      { id: "reports", label: "Performance & ROI", title: "Bot Performance & ROI Analytics", icon: BarChart3, badge: "ROI" },
+                      { id: "logs", label: "Blast Logs", title: "Blast Delivery & Message History Logs", icon: History, badge: scopedLogs.length > 0 ? scopedLogs.length : null },
+                      { id: "settings", label: "Settings", title: "Facebook Pages, API & Platform Settings", icon: Settings, badge: null },
+                    ]
+                  : toolCategory === "response"
+                  ? [
+                      { id: "response-rules", label: "Inbound Rules", title: "Keywords, Attachments & Anti-Spam Trigger Rules", icon: Sliders, badge: "Active" },
+                      { id: "response-templates", label: "JSON Templates", title: "Multi-Template Interactive JSON Library", icon: FileJson, badge: "Flows" },
+                      { id: "response-simulator", label: "Flow Simulator", title: "Live Chat Interactive Sandbox Simulator", icon: FlaskConical, badge: "Live" },
+                      { id: "settings", label: "Settings", title: "Facebook Pages, API & Platform Settings", icon: Settings, badge: null },
+                    ]
+                  : [
+                      { id: "comcent-live", label: "Live Command Stream", title: "Live Customer Communication & House Dispatch", icon: Radio, badge: "Live" },
+                      { id: "settings", label: "Settings", title: "Facebook Pages, API & Platform Settings", icon: Settings, badge: null },
+                    ]
+                ).map((tab) => {
+                  const Icon = tab.icon;
+                  const isActive =
+                    activeTab === tab.id ||
+                    (tab.id === "comcent-live" && activeTab === "comcent") ||
+                    (tab.id === "settings" && activeTab === "pages") ||
+                    (tab.id === "response-rules" && activeTab === "response") ||
+                    (tab.id === "response-templates" && activeTab === "json-builder");
 
-            {/* Dynamic Active Context Tabs for Selected Mode */}
-            {(toolCategory === "hub"
-              ? [
-                  {
-                    id: "central-hub",
-                    label: "Sales Advisor",
-                    title: "Executive Business Intelligence & Strategy",
-                    icon: Sparkles,
-                    badge: "AI",
-                  },
-                  {
-                    id: "settings",
-                    label: "Settings",
-                    title: "Facebook Pages, API & Platform Settings",
-                    icon: Settings,
-                    badge: null,
-                  },
-                ]
-              : toolCategory === "cdc"
-              ? [
-                  {
-                    id: "cdc-portal",
-                    label: "Distribution Portal",
-                    title: "Unified Multi-Page Content Publishing, Scheduling & Templates",
-                    icon: Layers,
-                    badge: "CDC",
-                  },
-                  {
-                    id: "settings",
-                    label: "Settings",
-                    title: "Facebook Pages, API & Platform Settings",
-                    icon: Settings,
-                    badge: null,
-                  },
-                ]
-              : toolCategory === "ads"
-              ? [
-                  {
-                    id: "advance-ads-analytics",
-                    label: "Creative & Sales Intelligence",
-                    title: "Advanced Photo vs Video Analytics, Copy Angles, Campaign Design & AI-Ready Export",
-                    icon: Sparkles,
-                    badge: "AI Ready",
-                  },
-                  {
-                    id: "ad-attribution",
-                    label: "Bot & Fraud Matrix",
-                    title: "Meta Ad Creative Performance & Bot Detection Matrix",
-                    icon: Target,
-                    badge: "Fraud Audit",
-                  },
-                  {
-                    id: "settings",
-                    label: "Settings",
-                    title: "Facebook Pages, API & Platform Settings",
-                    icon: Settings,
-                    badge: null,
-                  },
-                ]
-              : toolCategory === "blaster"
-              ? [
-                  {
-                    id: "scanner",
-                    label: "Lead Scanner",
-                    title: "Inactive Lead Scanner",
-                    icon: Radar,
-                    badge: scopedScannerSummary.unresponsiveCount > 0 ? scopedScannerSummary.unresponsiveCount : null,
-                  },
-                  {
-                    id: "bot-setup",
-                    label: "Bot Setup",
-                    title: "Follow-Up Bot Setup & Rules",
-                    icon: Bot,
-                    badge: null,
-                  },
-                  {
-                    id: "reports",
-                    label: "Performance & ROI",
-                    title: "Bot Performance & ROI Analytics",
-                    icon: BarChart3,
-                    badge: "ROI",
-                  },
-                  {
-                    id: "logs",
-                    label: "Blast Logs",
-                    title: "Blast Delivery & Message History Logs",
-                    icon: History,
-                    badge: scopedLogs.length > 0 ? scopedLogs.length : null,
-                  },
-                  {
-                    id: "settings",
-                    label: "Settings",
-                    title: "Facebook Pages, API & Platform Settings",
-                    icon: Settings,
-                    badge: null,
-                  },
-                ]
-              : toolCategory === "response"
-              ? [
-                  {
-                    id: "response-rules",
-                    label: "Inbound Rules",
-                    title: "Keywords, Attachments & Anti-Spam Trigger Rules",
-                    icon: Sliders,
-                    badge: "Active",
-                  },
-                  {
-                    id: "response-templates",
-                    label: "JSON Templates",
-                    title: "Multi-Template Interactive JSON Library",
-                    icon: FileJson,
-                    badge: "Flows",
-                  },
-                  {
-                    id: "response-simulator",
-                    label: "Flow Simulator",
-                    title: "Live Chat Interactive Sandbox Simulator",
-                    icon: FlaskConical,
-                    badge: "Live",
-                  },
-                  {
-                    id: "settings",
-                    label: "Settings",
-                    title: "Facebook Pages, API & Platform Settings",
-                    icon: Settings,
-                    badge: null,
-                  },
-                ]
-              : [
-                  {
-                    id: "comcent-live",
-                    label: "Live Command Stream",
-                    title: "Live Customer Communication & House Dispatch",
-                    icon: Radio,
-                    badge: "Live",
-                  },
-                  {
-                    id: "settings",
-                    label: "Settings",
-                    title: "Facebook Pages, API & Platform Settings",
-                    icon: Settings,
-                    badge: null,
-                  },
-                ]
-            ).map((tab) => {
-              const Icon = tab.icon;
-              const isActive =
-                activeTab === tab.id ||
-                (tab.id === "comcent-live" && activeTab === "comcent") ||
-                (tab.id === "settings" && activeTab === "pages") ||
-                (tab.id === "response-rules" && activeTab === "response") ||
-                (tab.id === "response-templates" && activeTab === "json-builder");
-
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  title={tab.title}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs transition shrink-0 cursor-pointer ${
-                    isActive
-                      ? toolCategory === "hub"
-                        ? "bg-emerald-600 text-white font-bold shadow-xs dark:bg-emerald-600"
-                        : toolCategory === "ads"
-                        ? "bg-purple-600 text-white font-bold shadow-xs dark:bg-purple-600"
-                        : toolCategory === "response"
-                        ? "bg-amber-600 text-white font-bold shadow-xs dark:bg-amber-600"
-                        : toolCategory === "comcent"
-                        ? "bg-indigo-600 text-white font-bold shadow-xs dark:bg-indigo-600"
-                        : "bg-blue-600 text-white font-bold shadow-xs dark:bg-blue-600"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/60 font-medium"
-                  }`}
-                >
-                  <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-white" : "text-slate-400 dark:text-slate-500"}`} />
-                  <span className="whitespace-nowrap">{tab.label}</span>
-                  {tab.badge !== null && (
-                    <span
-                      className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold transition shrink-0 ${
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as any)}
+                      title={tab.title}
+                      className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs transition shrink-0 cursor-pointer ${
                         isActive
-                          ? "bg-white/20 text-white"
-                          : "bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
+                          ? toolCategory === "hub"
+                            ? "bg-emerald-600 text-white font-bold shadow-xs dark:bg-emerald-600"
+                            : toolCategory === "ads"
+                            ? "bg-purple-600 text-white font-bold shadow-xs dark:bg-purple-600"
+                            : toolCategory === "advance-scan"
+                            ? "bg-teal-600 text-white font-bold shadow-xs dark:bg-teal-600"
+                            : toolCategory === "response"
+                            ? "bg-amber-600 text-white font-bold shadow-xs dark:bg-amber-600"
+                            : toolCategory === "comcent"
+                            ? "bg-indigo-600 text-white font-bold shadow-xs dark:bg-indigo-600"
+                            : "bg-blue-600 text-white font-bold shadow-xs dark:bg-blue-600"
+                          : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/60 font-medium"
                       }`}
                     >
-                      {tab.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+                      <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-white" : "text-slate-400 dark:text-slate-500"}`} />
+                      <span className="whitespace-nowrap">{tab.label}</span>
+                      {tab.badge !== null && (
+                        <span
+                          className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold transition shrink-0 ${
+                            isActive
+                              ? "bg-white/20 text-white"
+                              : "bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
+                          }`}
+                        >
+                          {tab.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
         {/* Tab Content Rendering */}
         <div className="pt-2">
@@ -1443,9 +1476,26 @@ export default function SieReachDashboard() {
                 setToolCategory("ads");
                 setActiveTab("ad-attribution");
               }}
+              onNavigateToAdvanceScan={() => {
+                setToolCategory("advance-scan");
+                setActiveTab("advance-scan");
+              }}
               onNavigateToCdc={() => {
                 setToolCategory("cdc");
                 setActiveTab("cdc-portal");
+              }}
+            />
+          )}
+
+          {(toolCategory === "advance-scan" || activeTab === "advance-scan") && (
+            <AdvanceScanTab
+              pages={scopedPages}
+              activeBusiness={selectedBusiness}
+              selectedPageId={selectedPageId}
+              onSelectPageId={setSelectedPageId}
+              onNavigateToComcent={() => {
+                setToolCategory("comcent");
+                setActiveTab("comcent-live");
               }}
             />
           )}
@@ -1790,6 +1840,11 @@ export default function SieReachDashboard() {
           </div>
         </div>
       )}
+
+      {/* Floating Interactive Theme & Navigation Switcher Pill */}
+      <div className="fixed bottom-5 right-5 z-40 hidden sm:block">
+        <ThemeLayoutSwitcher variant="floating" />
+      </div>
     </div>
   );
 }

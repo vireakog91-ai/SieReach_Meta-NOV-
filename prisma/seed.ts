@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { INITIAL_PAGES, INITIAL_LEADS, INITIAL_AD_CREATIVE_INSIGHTS } from "../src/lib/mockData";
+import { evaluateAdvanceScan } from "../src/lib/advanceScan";
 
 const prisma = new PrismaClient();
 
@@ -108,6 +109,17 @@ async function main() {
     const custMsAgo = lead.lastCustomerMessageHoursAgo * 60 * 60 * 1000;
     const agentMsAgo = lead.lastAgentMessageHoursAgo * 60 * 60 * 1000;
 
+    const scanEval = evaluateAdvanceScan(
+      [{ sender: "customer", text: lead.lastCustomerMessage }],
+      {
+        lastCustomerMessage: lead.lastCustomerMessage,
+        detectedPhone: lead.detectedPhone,
+        voiceCount: lead.voiceCount,
+        textCount: lead.textCount,
+        orderValue: lead.orderValue,
+      }
+    );
+
     await prisma.leadConversation.create({
       data: {
         pageId: lead.pageId,
@@ -126,6 +138,16 @@ async function main() {
         repliedAfterStep: lead.repliedAfterStep || null,
         isConverted: Boolean(lead.isConverted),
         orderValue: lead.orderValue || null,
+        detectedPhone: lead.detectedPhone || scanEval.detectedPhone,
+        detectedPhoneSnippet: lead.detectedPhoneSnippet || scanEval.detectedPhoneSnippet,
+        voiceCount: lead.voiceCount !== undefined ? lead.voiceCount : scanEval.voiceCount,
+        textCount: lead.textCount !== undefined ? lead.textCount : scanEval.textCount,
+        scanCategory: lead.scanCategory || scanEval.scanCategory,
+        scanFlags: JSON.stringify(scanEval.scanFlags),
+        isQualified: Boolean(lead.isQualified || (lead.detectedPhone && lead.isConverted)),
+        qualificationReason: lead.qualificationReason || null,
+        customerAddress: lead.customerAddress || null,
+        advanceScanAt: new Date(),
       },
     });
   }

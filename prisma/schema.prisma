@@ -34,6 +34,9 @@ model FacebookPage {
   campaigns  FollowUpCampaign[]
   logs       BlastLog[]
   cdcTargets CdcPostTarget[]
+
+  @@index([businessName])
+  @@index([isActive])
 }
 
 model LeadConversation {
@@ -58,12 +61,36 @@ model LeadConversation {
   notes                 String?
   isConverted           Boolean   @default(false)
   orderValue            Float?    // Actual or estimated converted purchase revenue ($)
+
+  // Advance Scan & Inbound Triage Intelligence
+  detectedPhone         String?   // Extracted mobile number (e.g. 012 888 999)
+  detectedPhoneSnippet  String?   // Context message snippet containing the phone number
+  voiceCount            Int       @default(0) // Count of audio / voice clips sent by customer
+  textCount             Int       @default(0) // Total inbound text interactions from customer
+  scanCategory          String?   @default("NORMAL") // PHONE_DETECTED, MULTI_VOICE, HIGH_TEXT, NORMAL
+  scanFlags             String?   // JSON array of detected flags, e.g. ["PHONE_DETECTED", "MULTI_VOICE"]
+  isQualified           Boolean   @default(false) // Marked as qualified prospect
+  qualificationReason   String?   // e.g. "Customer sent mobile number for purchase confirmation"
+  qualifiedAt           DateTime?
+  convertedAt           DateTime?
+  customerAddress       String?   // Customer delivery address if detected or entered
+  advanceScanAt         DateTime?
+
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
   logs BlastLog[]
 
   @@unique([pageId, psid])
+  @@index([pageId])
+  @@index([status])
+  @@index([isConverted])
+  @@index([isQualified])
+  @@index([scanCategory])
+  @@index([detectedPhone])
+  @@index([lastCustomerMessageAt])
+  @@index([lastAgentMessageAt])
+  @@index([advanceScanAt])
 }
 
 model FollowUpCampaign {
@@ -98,6 +125,10 @@ model FollowUpCampaign {
   updatedAt              DateTime  @updatedAt
 
   logs BlastLog[]
+
+  @@index([pageId])
+  @@index([isActive])
+  @@index([businessName])
 }
 
 model BlastLog {
@@ -118,6 +149,11 @@ model BlastLog {
   respondedAt   DateTime?
   errorMessage  String?
   sentAt        DateTime  @default(now())
+
+  @@index([pageId, recipientPsid])
+  @@index([status])
+  @@index([sentAt])
+  @@index([campaignId])
 }
 
 model SystemSetting {
@@ -183,6 +219,10 @@ model CdcPost {
   updatedAt    DateTime        @updatedAt
 
   targets      CdcPostTarget[]
+
+  @@index([status])
+  @@index([businessName])
+  @@index([scheduledAt])
 }
 
 model CdcPostTarget {
@@ -202,6 +242,7 @@ model CdcPostTarget {
   updatedAt      DateTime     @updatedAt
 
   @@unique([postId, pageId])
+  @@index([pageId, status])
 }
 
 // ==========================================

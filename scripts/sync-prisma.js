@@ -47,6 +47,12 @@ console.log("[sync-prisma] dbUrl:", dbUrl, "| current:", match ? match[1] : "non
 if (match && match[1] !== targetProvider) {
   console.log(`[sync-prisma] Switching Prisma provider from "${match[1]}" to "${targetProvider}"...`);
   schema = schema.replace(providerRegex, `provider = "${targetProvider}"`);
+
+  // If deploying to Supabase with DIRECT_URL for migrations & connection pooling
+  if (targetProvider === "postgresql" && process.env.DIRECT_URL && !schema.includes("directUrl")) {
+    schema = schema.replace(/url\s*=\s*env\("DATABASE_URL"\)/, 'url       = env("DATABASE_URL")\n  directUrl = env("DIRECT_URL")');
+  }
+
   fs.writeFileSync(schemaPath, schema, "utf8");
 
   try {
@@ -55,11 +61,31 @@ if (match && match[1] !== targetProvider) {
     if (isSqlite) {
       console.log("[sync-prisma] Syncing SQLite schema with prisma db push...");
       execSync("npx prisma db push --accept-data-loss", { stdio: "inherit" });
+    } else {
+      console.log("[sync-prisma] Syncing remote PostgreSQL schema with prisma db push...");
+      try {
+        execSync("npx prisma db push --accept-data-loss", { stdio: "inherit" });
+      } catch (pushErr) {
+        console.warn("[sync-prisma] Remote db push warning:", pushErr.message);
+      }
     }
   } catch (err) {
     console.error("[sync-prisma] Error running prisma sync:", err.message);
   }
 } else {
+  if (targetProvider === "postgresql") {
+    if (process.env.DIRECT_URL && !schema.includes("directUrl")) {
+      schema = schema.replace(/url\s*=\s*env\("DATABASE_URL"\)/, 'url       = env("DATABASE_URL")\n  directUrl = env("DIRECT_URL")');
+      fs.writeFileSync(schemaPath, schema, "utf8");
+    }
+    console.log("[sync-prisma] Syncing remote PostgreSQL schema with prisma db push...");
+    try {
+      execSync("npx prisma db push --accept-data-loss", { stdio: "inherit" });
+    } catch (e) {
+      console.warn("[sync-prisma] Remote db push warning:", e.message);
+    }
+  }
+
   // If already matches, verify client is generated and sqlite db has latest schema
   if (isSqlite && process.argv.includes("--push")) {
     try {

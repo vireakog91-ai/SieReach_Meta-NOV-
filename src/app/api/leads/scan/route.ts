@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { scanInactiveLeads } from "@/lib/scanner";
 import { requireAdminAuth } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   const unauthorized = await requireAdminAuth(req);
   if (unauthorized) return unauthorized;

@@ -6,6 +6,7 @@ import { syncLiveConversations } from "@/lib/scanner";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 const noCacheHeaders = {
   "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",

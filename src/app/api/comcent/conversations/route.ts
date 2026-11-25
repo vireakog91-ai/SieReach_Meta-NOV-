@@ -4,6 +4,7 @@ import { requireAdminAuth } from "@/lib/auth";
 import { DEFAULT_RULES, ResponseRuleItem } from "@/app/api/response-rules/route";
 import { DEFAULT_TEMPLATES, ResponseTemplateItem } from "@/app/api/response-templates/route";
 import { INITIAL_LEADS, INITIAL_PAGES } from "@/lib/mockData";
+import { extractMobileNumber, evaluateAdvanceScan, isVoiceMessage } from "@/lib/advanceScan";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -31,6 +32,21 @@ export interface ComcentTakeoverInfo {
   takenOverAt: string;
 }
 
+export interface ComcentAdvanceScanInfo {
+  detectedPhone?: string | null;
+  detectedPhoneSnippet?: string | null;
+  voiceCount: number;
+  textCount: number;
+  scanCategory: "PHONE_DETECTED" | "MULTI_VOICE" | "HIGH_TEXT" | "NORMAL";
+  purchaseIntentConfidence: number;
+  isQualified: boolean;
+  isConverted: boolean;
+  orderValue?: number | null;
+  convertedAmount?: number | null;
+  customerAddress?: string | null;
+  notes?: string | null;
+}
+
 export interface ComcentConversationItem {
   id: string;
   pageId: string;
@@ -52,6 +68,7 @@ export interface ComcentConversationItem {
     badgeColor: "emerald" | "blue" | "purple" | "rose" | "amber" | "slate";
     needsCommander: boolean;
   };
+  advanceScan?: ComcentAdvanceScanInfo;
   takeover?: ComcentTakeoverInfo;
   messages: ComcentMessageItem[];
   unreadCount: number;
@@ -80,6 +97,31 @@ export function qualifyInboundMessage(
   needsCommander: boolean;
 } {
   const norm = text.toLowerCase().trim();
+
+  // Advance Scan: Mobile Phone Number Detection (Purchase Confirmation Signal)
+  const phoneRes = extractMobileNumber(text);
+  if (phoneRes.hasPhone && phoneRes.formattedPhone) {
+    return {
+      isQualified: true,
+      ruleName: "Mobile Phone (Purchase Confirmation)",
+      ruleType: "ADVANCE_SCAN",
+      badgeText: `📱 Phone: ${phoneRes.formattedPhone}`,
+      badgeColor: "emerald",
+      needsCommander: false,
+    };
+  }
+
+  // Advance Scan: Voice Clip / Audio Inquiry
+  if (attachmentType === "audio" || isVoiceMessage(text)) {
+    return {
+      isQualified: true,
+      ruleName: "Voice Message / Audio Note",
+      ruleType: "ADVANCE_SCAN",
+      badgeText: "🎙️ Voice Inquiry",
+      badgeColor: "purple",
+      needsCommander: false,
+    };
+  }
 
   // 1. Check attachment rules
   if (attachmentType !== "none") {
@@ -309,6 +351,17 @@ export function generateSeedConversations(): ComcentConversationItem[] {
       }
     }
 
+    const evalRes = evaluateAdvanceScan(
+      msgs.map((m) => ({ sender: m.sender, text: m.text, attachmentType: m.attachmentType })),
+      {
+        lastCustomerMessage: lead.lastCustomerMessage,
+        detectedPhone: lead.detectedPhone,
+        voiceCount: lead.voiceCount,
+        textCount: lead.textCount,
+        orderValue: lead.orderValue,
+      }
+    );
+
     return {
       id: `conv_${lead.pageId}_${lead.psid}`,
       pageId: lead.pageId,
@@ -320,12 +373,40 @@ export function generateSeedConversations(): ComcentConversationItem[] {
       adSource: lead.adSource,
       lastMessage: lastMsgText,
       lastMessageAt: lastMsg?.timestamp || new Date().toISOString(),
-      status: convStatus,
+      status: (lead.isConverted ? "CONVERTED" : convStatus) as any,
       qualification: {
         ...qual,
-        badgeText: convStatus === "REPLIED" ? "✓ Responded (Commander)" : qual.badgeText,
-        badgeColor: convStatus === "REPLIED" ? "emerald" : qual.badgeColor,
-        needsCommander: convStatus === "NEEDS_COMMANDER",
+        badgeText:
+          evalRes.detectedPhone
+            ? `📱 Phone: ${evalRes.detectedPhone}`
+            : evalRes.voiceCount >= 2
+            ? `🎙️ ${evalRes.voiceCount} Voices`
+            : convStatus === "REPLIED"
+            ? "✓ Responded (Commander)"
+            : qual.badgeText,
+        badgeColor:
+          evalRes.detectedPhone
+            ? "emerald"
+            : evalRes.voiceCount >= 2
+            ? "purple"
+            : convStatus === "REPLIED"
+            ? "emerald"
+            : qual.badgeColor,
+        needsCommander: convStatus === "NEEDS_COMMANDER" && !evalRes.detectedPhone,
+      },
+      advanceScan: {
+        detectedPhone: lead.detectedPhone || evalRes.detectedPhone,
+        detectedPhoneSnippet: lead.detectedPhoneSnippet || evalRes.detectedPhoneSnippet,
+        voiceCount: lead.voiceCount !== undefined ? lead.voiceCount : evalRes.voiceCount,
+        textCount: lead.textCount !== undefined ? lead.textCount : evalRes.textCount,
+        scanCategory: (lead.scanCategory as any) || evalRes.scanCategory,
+        purchaseIntentConfidence: evalRes.purchaseIntentConfidence,
+        isQualified: Boolean(lead.isQualified || (lead.detectedPhone && lead.isConverted)),
+        isConverted: Boolean(lead.isConverted),
+        orderValue: lead.orderValue || null,
+        convertedAmount: lead.orderValue || null,
+        customerAddress: lead.customerAddress || null,
+        notes: null,
       },
       messages: msgs,
       unreadCount: convStatus === "NEEDS_COMMANDER" ? 1 : 0,
@@ -334,6 +415,7 @@ export function generateSeedConversations(): ComcentConversationItem[] {
 }
 
 async function loadConversations(): Promise<ComcentConversationItem[]> {
+  let convs: ComcentConversationItem[] = [];
   try {
     const record = await prisma.systemSetting.findUnique({
       where: { key: SETTING_KEY_CONVERSATIONS },
@@ -341,13 +423,67 @@ async function loadConversations(): Promise<ComcentConversationItem[]> {
     if (record?.value) {
       const parsed = JSON.parse(record.value);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        convs = parsed;
       }
     }
   } catch (err) {
     console.warn("Could not load comcent conversations from DB:", err);
   }
-  return generateSeedConversations();
+
+  if (convs.length === 0) {
+    convs = generateSeedConversations();
+  }
+
+  // Always merge real-time LeadConversation database records (e.g. advance scan phones, conversions, order values)
+  try {
+    const dbLeads = await prisma.leadConversation.findMany({ include: { page: true } });
+    if (dbLeads.length > 0) {
+      const leadMap = new Map(dbLeads.map((l) => [`${l.pageId}_${l.psid}`, l]));
+
+      for (const c of convs) {
+        const dbLead = leadMap.get(`${c.pageId}_${c.psid}`);
+        if (dbLead) {
+          const evalRes = evaluateAdvanceScan(
+            c.messages.map((m) => ({ sender: m.sender, text: m.text, attachmentType: m.attachmentType })),
+            {
+              lastCustomerMessage: dbLead.lastCustomerMessage || c.lastMessage,
+              detectedPhone: dbLead.detectedPhone,
+              voiceCount: dbLead.voiceCount,
+              textCount: dbLead.textCount,
+              orderValue: dbLead.orderValue,
+            }
+          );
+
+          c.advanceScan = {
+            detectedPhone: dbLead.detectedPhone || evalRes.detectedPhone,
+            detectedPhoneSnippet: dbLead.detectedPhoneSnippet || evalRes.detectedPhoneSnippet,
+            voiceCount: dbLead.voiceCount !== undefined ? dbLead.voiceCount : evalRes.voiceCount,
+            textCount: dbLead.textCount !== undefined ? dbLead.textCount : evalRes.textCount,
+            scanCategory: (dbLead.scanCategory as any) || evalRes.scanCategory,
+            purchaseIntentConfidence: evalRes.purchaseIntentConfidence,
+            isQualified: Boolean(dbLead.isQualified),
+            isConverted: Boolean(dbLead.isConverted || dbLead.status === "CONVERTED"),
+            orderValue: dbLead.orderValue || null,
+            convertedAmount: dbLead.orderValue || null,
+            customerAddress: dbLead.customerAddress || null,
+            notes: (dbLead as any).notes || null,
+          };
+
+          if (dbLead.isConverted || dbLead.status === "CONVERTED") {
+            c.status = "CONVERTED";
+          }
+          if (c.advanceScan.detectedPhone && c.status !== "REPLIED") {
+            c.qualification.badgeText = `📱 Phone: ${c.advanceScan.detectedPhone}`;
+            c.qualification.badgeColor = "emerald";
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Error merging db leads into comcent:", err);
+  }
+
+  return convs;
 }
 
 async function saveConversations(convs: ComcentConversationItem[]): Promise<void> {
@@ -609,6 +745,79 @@ export async function POST(req: NextRequest) {
       }
     } else if (action === "reset_seed") {
       convs = generateSeedConversations();
+    } else if (action === "mark_qualified") {
+      const targetConv = convs[convIdx];
+      const targetLead = await prisma.leadConversation.findFirst({
+        where: { pageId: targetConv.pageId, psid: targetConv.psid },
+      });
+      if (targetLead) {
+        await prisma.leadConversation.update({
+          where: { id: targetLead.id },
+          data: {
+            isQualified: true,
+            qualifiedAt: new Date(),
+            qualificationReason: targetLead.detectedPhone
+              ? `Page Manager verified lead in COMCENT (Phone: ${targetLead.detectedPhone})`
+              : "Page Manager verified high purchase intent in COMCENT",
+          },
+        });
+      }
+      if (!targetConv.advanceScan) {
+        targetConv.advanceScan = {
+          voiceCount: 0,
+          textCount: 1,
+          scanCategory: "NORMAL",
+          purchaseIntentConfidence: 85,
+          isQualified: true,
+          isConverted: false,
+        };
+      } else {
+        targetConv.advanceScan.isQualified = true;
+      }
+      targetConv.qualification.isQualified = true;
+      targetConv.qualification.badgeText = "★ Verified Qualified";
+      targetConv.qualification.badgeColor = "blue";
+    } else if (action === "mark_converted") {
+      const targetConv = convs[convIdx];
+      const val = typeof body.orderValue === "number" ? body.orderValue : parseFloat(body.orderValue || "45.0");
+      const targetLead = await prisma.leadConversation.findFirst({
+        where: { pageId: targetConv.pageId, psid: targetConv.psid },
+      });
+      if (targetLead) {
+        await prisma.leadConversation.update({
+          where: { id: targetLead.id },
+          data: {
+            isConverted: true,
+            status: "CONVERTED",
+            convertedAt: new Date(),
+            orderValue: isNaN(val) ? 45.0 : val,
+            customerAddress: body.customerAddress || targetLead.customerAddress,
+            notes: body.notes || targetLead.notes,
+            isQualified: true,
+            qualifiedAt: targetLead.qualifiedAt || new Date(),
+          },
+        });
+      }
+      if (!targetConv.advanceScan) {
+        targetConv.advanceScan = {
+          voiceCount: 0,
+          textCount: 1,
+          scanCategory: "PHONE_DETECTED",
+          purchaseIntentConfidence: 100,
+          isQualified: true,
+          isConverted: true,
+          orderValue: isNaN(val) ? 45.0 : val,
+          customerAddress: body.customerAddress || null,
+        };
+      } else {
+        targetConv.advanceScan.isConverted = true;
+        targetConv.advanceScan.isQualified = true;
+        targetConv.advanceScan.orderValue = isNaN(val) ? 45.0 : val;
+        targetConv.advanceScan.convertedAmount = isNaN(val) ? 45.0 : val;
+        if (body.customerAddress) targetConv.advanceScan.customerAddress = body.customerAddress;
+        if (body.notes) targetConv.advanceScan.notes = body.notes;
+      }
+      targetConv.status = "CONVERTED";
     } else if (action === "simulate_inbound") {
       // Simulate an incoming customer message to test Live View & Qualification
       const targetPageId = body.pageId || "fb_page_01";
